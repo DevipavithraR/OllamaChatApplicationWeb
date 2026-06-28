@@ -7,12 +7,11 @@ import {
   Send, 
   Plus, 
   RefreshCw, 
-  Trash2, 
   Clock, 
   User, 
   Sparkles, 
-  Search, 
-  BookOpen 
+  BookOpen,
+  Heart
 } from 'lucide-react';
 
 const API_BASE = 'http://localhost:8000';
@@ -26,23 +25,24 @@ function App() {
   const [sessionList, setSessionList] = useState([]);
 
   // Database lists
-  const [reservations, setReservations] = useState([]);
-  const [menuItems, setMenuItems] = useState([]);
-  const [customers, setCustomers] = useState([]);
+  const [appointments, setAppointments] = useState([]);
+  const [doctors, setDoctors] = useState([]);
+  const [departments, setDepartments] = useState([]);
+  const [patients, setPatients] = useState([]);
   const [isLoadingData, setIsLoadingData] = useState(false);
   const [dataError, setDataError] = useState(null);
 
   // Filter/Search states
-  const [activeTab, setActiveTab] = useState('reservations'); // reservations, menu, customers
-  const [selectedMenuCategory, setSelectedMenuCategory] = useState('all');
-  const [menuSearchText, setMenuSearchText] = useState('');
+  const [activeTab, setActiveTab] = useState('appointments'); // appointments, doctors, departments, patients
+  const [selectedDoctorDept, setSelectedDoctorDept] = useState('all');
+  const [doctorSearchText, setDoctorSearchText] = useState('');
 
   const messagesEndRef = useRef(null);
 
   // Initialize first session
   useEffect(() => {
     // Load existing sessions from localStorage or create new
-    const savedSessions = JSON.parse(localStorage.getItem('restaurant_chat_sessions') || '[]');
+    const savedSessions = JSON.parse(localStorage.getItem('hospital_chat_sessions') || '[]');
     if (savedSessions.length > 0) {
       setSessionList(savedSessions);
       selectSession(savedSessions[0]);
@@ -56,7 +56,7 @@ function App() {
     messagesEndRef.current?.scrollIntoView({ behavior: 'smooth' });
   }, [messages, isLoadingChat]);
 
-  // Real-time polling for reservations, menu, customers
+  // Real-time polling for appointments, doctors, departments, patients
   useEffect(() => {
     fetchDatabaseData();
     const interval = setInterval(() => {
@@ -70,23 +70,27 @@ function App() {
   const fetchDatabaseData = async () => {
     try {
       // Parallel fetches for speed
-      const [resReservations, resMenu, resCustomers] = await Promise.all([
-        fetch(`${API_BASE}/reservations/`),
-        fetch(`${API_BASE}/menu/`),
-        fetch(`${API_BASE}/customers/`)
+      const [resAppointments, resDoctors, resDepartments, resPatients] = await Promise.all([
+        fetch(`${API_BASE}/appointments/`),
+        fetch(`${API_BASE}/doctors/`),
+        fetch(`${API_BASE}/departments/`),
+        fetch(`${API_BASE}/patients/`)
       ]);
 
-      if (resReservations.ok) {
-        const data = await resReservations.json();
-        // Sort reservations by created_at or reservation_time descending
-        setReservations(data.sort((a, b) => b.id - a.id));
+      if (resAppointments.ok) {
+        const data = await resAppointments.json();
+        // Sort appointments by created_at or appointment_datetime descending
+        setAppointments(data.sort((a, b) => b.appointment_id - a.appointment_id));
       }
-      if (resMenu.ok) {
-        setMenuItems(await resMenu.json());
+      if (resDoctors.ok) {
+        setDoctors(await resDoctors.json());
       }
-      if (resCustomers.ok) {
-        const data = await resCustomers.json();
-        setCustomers(data.sort((a, b) => b.id - a.id));
+      if (resDepartments.ok) {
+        setDepartments(await resDepartments.json());
+      }
+      if (resPatients.ok) {
+        const data = await resPatients.json();
+        setPatients(data.sort((a, b) => b.patient_id - a.patient_id));
       }
       setDataError(null);
     } catch (err) {
@@ -102,7 +106,7 @@ function App() {
     setMessages([
       {
         sender: 'assistant',
-        content: "Ciao! I am your Restaurant AI Receptionist. 🍕\nHow can I help you today? I can tell you about our menu, register you as a customer, or book a table reservation!",
+        message: "Hello! I am your Hope Hospital AI Receptionist. 🏥\nHow can I help you today? I can help you find doctors, explain our departments, register you as a patient, or book, reschedule, or cancel appointments!",
         created_at: new Date().toISOString()
       }
     ]);
@@ -110,7 +114,7 @@ function App() {
     // Save to list
     const updatedSessions = [newId, ...sessionList.filter(s => s !== newId)];
     setSessionList(updatedSessions);
-    localStorage.setItem('restaurant_chat_sessions', JSON.stringify(updatedSessions));
+    localStorage.setItem('hospital_chat_sessions', JSON.stringify(updatedSessions));
   };
 
   // Switch to an existing session and fetch its history
@@ -141,7 +145,7 @@ function App() {
     setMessages([
       {
         sender: 'assistant',
-        content: "Ciao! Welcome back. 🍕\nHow can I assist you with reservations or the menu today?",
+        message: "Hello! Welcome back. 🏥\nHow can I assist you with appointments or doctors today?",
         created_at: new Date().toISOString()
       }
     ]);
@@ -158,7 +162,7 @@ function App() {
     // Append user message
     const userMsg = {
       sender: 'user',
-      content: textToSend,
+      message: textToSend,
       created_at: new Date().toISOString()
     };
     setMessages(prev => [...prev, userMsg]);
@@ -179,11 +183,11 @@ function App() {
         // Append bot reply
         setMessages(prev => [...prev, {
           sender: 'assistant',
-          content: data.response,
+          message: data.response,
           created_at: new Date().toISOString()
         }]);
 
-        // Trigger immediate pull of reservations/customers to reflect updates
+        // Trigger immediate pull of appointments/patients to reflect updates
         fetchDatabaseData();
       } else {
         throw new Error('API Error');
@@ -192,7 +196,7 @@ function App() {
       console.error(err);
       setMessages(prev => [...prev, {
         sender: 'assistant',
-        content: 'Scusate! I encountered a network error. Please verify the backend service is running.',
+        message: 'I encountered a network error. Please verify the backend service is running.',
         created_at: new Date().toISOString()
       }]);
     } finally {
@@ -200,17 +204,17 @@ function App() {
     }
   };
 
-  // Cancel reservation
-  const handleCancelReservation = async (id) => {
-    if (!confirm('Are you sure you want to cancel this reservation?')) return;
+  // Cancel appointment
+  const handleCancelAppointment = async (id) => {
+    if (!confirm('Are you sure you want to cancel this appointment?')) return;
     try {
-      const res = await fetch(`${API_BASE}/reservations/${id}`, {
+      const res = await fetch(`${API_BASE}/appointments/${id}`, {
         method: 'DELETE'
       });
       if (res.ok) {
         fetchDatabaseData();
       } else {
-        alert('Failed to cancel reservation.');
+        alert('Failed to cancel appointment.');
       }
     } catch (err) {
       console.error(err);
@@ -220,10 +224,10 @@ function App() {
 
   // Quick Reply Suggestion Chips
   const suggestionChips = [
-    "What's on the menu?",
-    "Book a table for 4",
-    "List my reservations",
-    "Show drinks and desserts"
+    "Who are the cardiologists?",
+    "Register me as a patient",
+    "Book an appointment with Dr. Priya",
+    "View my upcoming appointments"
   ];
 
   // Helper to format date strings
@@ -245,12 +249,13 @@ function App() {
     }
   };
 
-  // Filter menu items by category and search term
-  const filteredMenuItems = menuItems.filter(item => {
-    const matchesCategory = selectedMenuCategory === 'all' || item.category.toLowerCase() === selectedMenuCategory.toLowerCase();
-    const matchesSearch = item.name.toLowerCase().includes(menuSearchText.toLowerCase()) || 
-                          item.description.toLowerCase().includes(menuSearchText.toLowerCase());
-    return matchesCategory && matchesSearch;
+  // Filter doctors by department and search term
+  const filteredDoctors = doctors.filter(doc => {
+    const matchesDept = selectedDoctorDept === 'all' || doc.department.toLowerCase() === selectedDoctorDept.toLowerCase();
+    const matchesSearch = doc.name.toLowerCase().includes(doctorSearchText.toLowerCase()) || 
+                          doc.specialization.toLowerCase().includes(doctorSearchText.toLowerCase()) ||
+                          doc.department.toLowerCase().includes(doctorSearchText.toLowerCase());
+    return matchesDept && matchesSearch;
   });
 
   return (
@@ -259,9 +264,9 @@ function App() {
       <aside className="sidebar">
         <div className="brand">
           <div className="brand-icon">
-            <Sparkles size={20} />
+            <Heart size={20} style={{ color: 'var(--accent-primary)' }} />
           </div>
-          <span className="brand-name">Restaurant AI Receptionist</span>
+          <span className="brand-name">Hope AI Receptionist</span>
         </div>
 
         <div className="sidebar-content">
@@ -288,25 +293,32 @@ function App() {
           <div style={{ marginTop: 'auto' }}>
             <div className="sidebar-nav">
               <div 
-                className={`nav-item ${activeTab === 'reservations' ? 'active' : ''}`}
-                onClick={() => setActiveTab('reservations')}
+                className={`nav-item ${activeTab === 'appointments' ? 'active' : ''}`}
+                onClick={() => setActiveTab('appointments')}
               >
                 <Calendar size={18} />
-                <span>Reservations</span>
+                <span>Appointments Log</span>
               </div>
               <div 
-                className={`nav-item ${activeTab === 'menu' ? 'active' : ''}`}
-                onClick={() => setActiveTab('menu')}
+                className={`nav-item ${activeTab === 'doctors' ? 'active' : ''}`}
+                onClick={() => setActiveTab('doctors')}
               >
-                <Utensils size={18} />
-                <span>Menu Explorer</span>
+                <User size={18} />
+                <span>Doctors Directory</span>
               </div>
               <div 
-                className={`nav-item ${activeTab === 'customers' ? 'active' : ''}`}
-                onClick={() => setActiveTab('customers')}
+                className={`nav-item ${activeTab === 'departments' ? 'active' : ''}`}
+                onClick={() => setActiveTab('departments')}
+              >
+                <BookOpen size={18} />
+                <span>Departments</span>
+              </div>
+              <div 
+                className={`nav-item ${activeTab === 'patients' ? 'active' : ''}`}
+                onClick={() => setActiveTab('patients')}
               >
                 <Users size={18} />
-                <span>Customers</span>
+                <span>Patients Log</span>
               </div>
             </div>
           </div>
@@ -326,7 +338,7 @@ function App() {
         <section className="chat-container">
           <header className="chat-header">
             <div className="chat-header-info">
-              <h2>Restaurant AI Receptionist</h2>
+              <h2>Hospital AI Receptionist</h2>
               <p>Assistant active • Session ID: {sessionId}</p>
             </div>
             {dataError && (
@@ -347,7 +359,7 @@ function App() {
                 </div>
                 <div>
                   <div className="message-bubble">
-                    {msg.content}
+                    {msg.message}
                   </div>
                   <div className="message-time">
                     {msg.created_at ? formatTime(msg.created_at) : formatTime(new Date())}
@@ -390,7 +402,7 @@ function App() {
               <input 
                 type="text" 
                 className="chat-input"
-                placeholder="Ask about the menu, check bookings, or make a reservation..."
+                placeholder="Ask about doctors, explain departments, book appointments..."
                 value={userInput}
                 onChange={(e) => setUserInput(e.target.value)}
                 disabled={isLoadingChat}
@@ -406,22 +418,28 @@ function App() {
         <section className="inspector-panel">
           <header className="inspector-header">
             <div className="inspector-title">
-              {activeTab === 'reservations' && (
+              {activeTab === 'appointments' && (
                 <>
                   <Calendar className="inspector-icon" size={18} />
-                  <span>Reservations Log</span>
+                  <span>Appointments Log</span>
                 </>
               )}
-              {activeTab === 'menu' && (
+              {activeTab === 'doctors' && (
                 <>
-                  <Utensils className="inspector-icon" size={18} />
-                  <span>Menu Catalog</span>
+                  <User className="inspector-icon" size={18} />
+                  <span>Doctors Directory</span>
                 </>
               )}
-              {activeTab === 'customers' && (
+              {activeTab === 'departments' && (
+                <>
+                  <BookOpen className="inspector-icon" size={18} />
+                  <span>Departments Catalog</span>
+                </>
+              )}
+              {activeTab === 'patients' && (
                 <>
                   <Users className="inspector-icon" size={18} />
-                  <span>Registered Customers</span>
+                  <span>Patients Directory</span>
                 </>
               )}
             </div>
@@ -442,52 +460,52 @@ function App() {
               </div>
             )}
 
-            {/* TAB CONTENT: RESERVATIONS */}
-            {activeTab === 'reservations' && (
+            {/* TAB CONTENT: APPOINTMENTS */}
+            {activeTab === 'appointments' && (
               <div>
-                {reservations.length === 0 ? (
+                {appointments.length === 0 ? (
                   <div className="empty-state">
                     <Calendar className="empty-icon" />
-                    <p className="empty-text">No reservations found in database.</p>
+                    <p className="empty-text">No appointments found in database.</p>
                   </div>
                 ) : (
-                  reservations.map(res => (
-                    <div key={res.id} className="data-card">
+                  appointments.map(app => (
+                    <div key={app.appointment_id} className="data-card">
                       <div className="data-card-header">
-                        <span className="data-card-title">Booking #{res.id}</span>
-                        <span className={`badge ${res.status.toLowerCase()}`}>
-                          {res.status}
+                        <span className="data-card-title">Appointment #{app.appointment_id}</span>
+                        <span className={`badge ${app.status.toLowerCase()}`}>
+                          {app.status}
                         </span>
                       </div>
                       <div className="data-card-grid">
                         <div className="data-item">
-                          <span className="data-label">Customer ID</span>
-                          <span className="data-value">{res.customer_id}</span>
+                          <span className="data-label">Patient ID</span>
+                          <span className="data-value">{app.patient_id}</span>
                         </div>
                         <div className="data-item">
-                          <span className="data-label">Party Size</span>
-                          <span className="data-value">{res.party_size} People</span>
+                          <span className="data-label">Doctor</span>
+                          <span className="data-value">{app.doctor ? app.doctor.name : `Doctor ID ${app.doctor_id}`}</span>
                         </div>
                         <div className="data-item" style={{ gridColumn: 'span 2' }}>
-                          <span className="data-label">Time</span>
-                          <span className="data-value">{formatDateDisplay(res.reservation_time)}</span>
+                          <span className="data-label">Date & Time</span>
+                          <span className="data-value">{formatDateDisplay(app.appointment_datetime)}</span>
                         </div>
-                        {res.special_requests && (
+                        {app.special_notes && (
                           <div className="data-item" style={{ gridColumn: 'span 2' }}>
-                            <span className="data-label">Special Requests</span>
+                            <span className="data-label">Notes/Symptoms</span>
                             <span className="data-value" style={{ fontStyle: 'italic' }}>
-                              "{res.special_requests}"
+                              "{app.special_notes}"
                             </span>
                           </div>
                         )}
                       </div>
-                      {res.status.toLowerCase() !== 'cancelled' && (
+                      {app.status.toLowerCase() !== 'cancelled' && (
                         <div className="data-card-actions">
                           <button 
                             className="btn-action-small danger"
-                            onClick={() => handleCancelReservation(res.id)}
+                            onClick={() => handleCancelAppointment(app.appointment_id)}
                           >
-                            Cancel Table
+                            Cancel Appointment
                           </button>
                         </div>
                       )}
@@ -497,60 +515,58 @@ function App() {
               </div>
             )}
 
-            {/* TAB CONTENT: MENU EXPLORER */}
-            {activeTab === 'menu' && (
+            {/* TAB CONTENT: DOCTORS DIRECTORY */}
+            {activeTab === 'doctors' && (
               <div>
                 {/* Search Bar */}
                 <div className="search-container">
                   <input 
                     type="text" 
                     className="form-input search-input" 
-                    placeholder="Search menu dishes..." 
-                    value={menuSearchText}
-                    onChange={(e) => setMenuSearchText(e.target.value)}
+                    placeholder="Search doctor or specialization..." 
+                    value={doctorSearchText}
+                    onChange={(e) => setDoctorSearchText(e.target.value)}
                   />
                 </div>
 
-                {/* Category Filters */}
+                {/* Department Filters */}
                 <div className="category-tabs">
-                  {['all', 'Appetizers', 'Entrees', 'Desserts', 'Drinks'].map(cat => (
+                  {['all', 'Cardiology', 'Pediatrics', 'Orthopedics', 'Neurology', 'General Medicine'].map(dept => (
                     <span 
-                      key={cat} 
-                      className={`cat-tab ${selectedMenuCategory === cat ? 'active' : ''}`}
-                      onClick={() => setSelectedMenuCategory(cat)}
+                      key={dept} 
+                      className={`cat-tab ${selectedDoctorDept === dept ? 'active' : ''}`}
+                      onClick={() => setSelectedDoctorDept(dept)}
                     >
-                      {cat}
+                      {dept}
                     </span>
                   ))}
                 </div>
 
-                {filteredMenuItems.length === 0 ? (
+                {filteredDoctors.length === 0 ? (
                   <div className="empty-state">
-                    <BookOpen className="empty-icon" />
-                    <p className="empty-text">No menu items match your selection.</p>
+                    <User className="empty-icon" />
+                    <p className="empty-text">No doctors match your selection.</p>
                   </div>
                 ) : (
-                  filteredMenuItems.map(item => (
-                    <div key={item.id} className="data-card">
+                  filteredDoctors.map(doc => (
+                    <div key={doc.doctor_id} className="data-card">
                       <div className="data-card-header">
-                        <span className="data-card-title">{item.name}</span>
+                        <span className="data-card-title">{doc.name}</span>
                         <span className="data-value" style={{ color: 'var(--accent-secondary)', fontWeight: 'bold' }}>
-                          ${item.price.toFixed(2)}
+                          ₹{doc.consultation_fee}
                         </span>
                       </div>
                       <div style={{ fontSize: '0.8rem', color: 'var(--text-muted)', marginBottom: '8px' }}>
-                        {item.description}
+                        {doc.specialization} • {doc.experience} Years Experience
                       </div>
                       <div className="data-card-grid">
                         <div className="data-item">
-                          <span className="data-label">Category</span>
-                          <span className="data-value">{item.category}</span>
+                          <span className="data-label">Available Days</span>
+                          <span className="data-value">{doc.available_days}</span>
                         </div>
                         <div className="data-item">
-                          <span className="data-label">Status</span>
-                          <span className={`badge ${item.is_available ? 'available' : 'cancelled'}`} style={{ alignSelf: 'flex-start' }}>
-                            {item.is_available ? 'Available' : 'Unavailable'}
-                          </span>
+                          <span className="data-label">Available Time</span>
+                          <span className="data-value">{doc.available_time}</span>
                         </div>
                       </div>
                     </div>
@@ -559,37 +575,70 @@ function App() {
               </div>
             )}
 
-            {/* TAB CONTENT: CUSTOMERS */}
-            {activeTab === 'customers' && (
+            {/* TAB CONTENT: DEPARTMENTS */}
+            {activeTab === 'departments' && (
               <div>
-                {customers.length === 0 ? (
+                {departments.length === 0 ? (
                   <div className="empty-state">
-                    <Users className="empty-icon" />
-                    <p className="empty-text">No registered customers yet.</p>
+                    <BookOpen className="empty-icon" />
+                    <p className="empty-text">No departments found.</p>
                   </div>
                 ) : (
-                  customers.map(c => (
-                    <div key={c.id} className="data-card">
+                  departments.map(dept => (
+                    <div key={dept.department_id} className="data-card">
+                      <div className="data-card-header">
+                        <span className="data-card-title">{dept.department_name}</span>
+                      </div>
+                      <div style={{ fontSize: '0.8rem', color: 'var(--text-muted)' }}>
+                        {dept.description}
+                      </div>
+                    </div>
+                  ))
+                )}
+              </div>
+            )}
+
+            {/* TAB CONTENT: PATIENTS */}
+            {activeTab === 'patients' && (
+              <div>
+                {patients.length === 0 ? (
+                  <div className="empty-state">
+                    <Users className="empty-icon" />
+                    <p className="empty-text">No registered patients yet.</p>
+                  </div>
+                ) : (
+                  patients.map(p => (
+                    <div key={p.patient_id} className="data-card">
                       <div className="data-card-header">
                         <span className="data-card-title" style={{ display: 'flex', alignItems: 'center', gap: '6px' }}>
                           <User size={14} style={{ color: 'var(--accent-primary)' }} />
-                          {c.name} (ID: {c.id})
+                          {p.name} (ID: {p.patient_id})
                         </span>
                       </div>
                       <div className="data-card-grid" style={{ gridTemplateColumns: '1fr' }}>
                         <div className="data-item">
                           <span className="data-label">Phone</span>
-                          <span className="data-value">{c.phone}</span>
+                          <span className="data-value">{p.phone_number}</span>
                         </div>
-                        {c.email && (
+                        {p.email && (
                           <div className="data-item">
                             <span className="data-label">Email</span>
-                            <span className="data-value">{c.email}</span>
+                            <span className="data-value">{p.email}</span>
                           </div>
                         )}
+                        <div className="data-item" style={{ display: 'flex', gap: '15px' }}>
+                          <div>
+                            <span className="data-label">Age</span>
+                            <span className="data-value">{p.age || 'N/A'}</span>
+                          </div>
+                          <div>
+                            <span className="data-label">Gender</span>
+                            <span className="data-value">{p.gender || 'N/A'}</span>
+                          </div>
+                        </div>
                         <div className="data-item">
                           <span className="data-label">Registered Date</span>
-                          <span className="data-value">{new Date(c.created_at).toLocaleDateString()}</span>
+                          <span className="data-value">{new Date(p.created_at).toLocaleDateString()}</span>
                         </div>
                       </div>
                     </div>
