@@ -2,17 +2,17 @@ import React, { useState, useEffect, useRef } from 'react';
 import { 
   MessageSquare, 
   Calendar, 
-  Utensils, 
+  Film, 
+  Building, 
   Users, 
   Send, 
   Plus, 
   RefreshCw, 
-  Trash2, 
   Clock, 
   User, 
   Sparkles, 
   Search, 
-  BookOpen 
+  Ticket 
 } from 'lucide-react';
 
 const API_BASE = 'http://localhost:8000';
@@ -26,23 +26,23 @@ function App() {
   const [sessionList, setSessionList] = useState([]);
 
   // Database lists
-  const [reservations, setReservations] = useState([]);
-  const [menuItems, setMenuItems] = useState([]);
+  const [bookings, setBookings] = useState([]);
+  const [shows, setShows] = useState([]);
+  const [theatres, setTheatres] = useState([]);
   const [customers, setCustomers] = useState([]);
   const [isLoadingData, setIsLoadingData] = useState(false);
   const [dataError, setDataError] = useState(null);
 
   // Filter/Search states
-  const [activeTab, setActiveTab] = useState('reservations'); // reservations, menu, customers
-  const [selectedMenuCategory, setSelectedMenuCategory] = useState('all');
-  const [menuSearchText, setMenuSearchText] = useState('');
+  const [activeTab, setActiveTab] = useState('bookings'); // bookings, movies, theatres, customers
+  const [selectedMovieGenre, setSelectedMovieGenre] = useState('all');
+  const [movieSearchText, setMovieSearchText] = useState('');
 
   const messagesEndRef = useRef(null);
 
   // Initialize first session
   useEffect(() => {
-    // Load existing sessions from localStorage or create new
-    const savedSessions = JSON.parse(localStorage.getItem('restaurant_chat_sessions') || '[]');
+    const savedSessions = JSON.parse(localStorage.getItem('cinema_chat_sessions') || '[]');
     if (savedSessions.length > 0) {
       setSessionList(savedSessions);
       selectSession(savedSessions[0]);
@@ -56,7 +56,7 @@ function App() {
     messagesEndRef.current?.scrollIntoView({ behavior: 'smooth' });
   }, [messages, isLoadingChat]);
 
-  // Real-time polling for reservations, menu, customers
+  // Real-time polling for bookings, shows, theatres, customers
   useEffect(() => {
     fetchDatabaseData();
     const interval = setInterval(() => {
@@ -69,24 +69,26 @@ function App() {
   // Fetch all lists from backend
   const fetchDatabaseData = async () => {
     try {
-      // Parallel fetches for speed
-      const [resReservations, resMenu, resCustomers] = await Promise.all([
-        fetch(`${API_BASE}/reservations/`),
-        fetch(`${API_BASE}/menu/`),
-        fetch(`${API_BASE}/customers/`)
+      const [resBookings, resShows, resTheatres, resCustomers] = await Promise.all([
+        fetch(`${API_BASE}/bookings`),
+        fetch(`${API_BASE}/shows`),
+        fetch(`${API_BASE}/theatres`),
+        fetch(`${API_BASE}/customers`)
       ]);
 
-      if (resReservations.ok) {
-        const data = await resReservations.json();
-        // Sort reservations by created_at or reservation_time descending
-        setReservations(data.sort((a, b) => b.id - a.id));
+      if (resBookings.ok) {
+        const data = await resBookings.json();
+        setBookings(data.sort((a, b) => b.booking_id - a.booking_id));
       }
-      if (resMenu.ok) {
-        setMenuItems(await resMenu.json());
+      if (resShows.ok) {
+        setShows(await resShows.json());
+      }
+      if (resTheatres.ok) {
+        setTheatres(await resTheatres.json());
       }
       if (resCustomers.ok) {
         const data = await resCustomers.json();
-        setCustomers(data.sort((a, b) => b.id - a.id));
+        setCustomers(data.sort((a, b) => b.customer_id - a.customer_id));
       }
       setDataError(null);
     } catch (err) {
@@ -102,15 +104,14 @@ function App() {
     setMessages([
       {
         sender: 'assistant',
-        content: "Ciao! I am your Restaurant AI Receptionist. 🍕\nHow can I help you today? I can tell you about our menu, register you as a customer, or book a table reservation!",
+        message: "Hello! I am your Cinema AI Receptionist. 🎬\nHow can I help you today? I can tell you about movie show schedules, register you as a customer, book tickets, or modify/cancel your bookings!",
         created_at: new Date().toISOString()
       }
     ]);
     
-    // Save to list
     const updatedSessions = [newId, ...sessionList.filter(s => s !== newId)];
     setSessionList(updatedSessions);
-    localStorage.setItem('restaurant_chat_sessions', JSON.stringify(updatedSessions));
+    localStorage.setItem('cinema_chat_sessions', JSON.stringify(updatedSessions));
   };
 
   // Switch to an existing session and fetch its history
@@ -141,7 +142,7 @@ function App() {
     setMessages([
       {
         sender: 'assistant',
-        content: "Ciao! Welcome back. 🍕\nHow can I assist you with reservations or the menu today?",
+        message: "Hello! Welcome back. 🎬\nHow can I assist you with shows or ticket bookings today?",
         created_at: new Date().toISOString()
       }
     ]);
@@ -155,10 +156,9 @@ function App() {
 
     if (!customText) setUserInput('');
 
-    // Append user message
     const userMsg = {
       sender: 'user',
-      content: textToSend,
+      message: textToSend,
       created_at: new Date().toISOString()
     };
     setMessages(prev => [...prev, userMsg]);
@@ -176,14 +176,12 @@ function App() {
 
       if (res.ok) {
         const data = await res.json();
-        // Append bot reply
         setMessages(prev => [...prev, {
           sender: 'assistant',
-          content: data.response,
+          message: data.response,
           created_at: new Date().toISOString()
         }]);
 
-        // Trigger immediate pull of reservations/customers to reflect updates
         fetchDatabaseData();
       } else {
         throw new Error('API Error');
@@ -192,7 +190,7 @@ function App() {
       console.error(err);
       setMessages(prev => [...prev, {
         sender: 'assistant',
-        content: 'Scusate! I encountered a network error. Please verify the backend service is running.',
+        message: 'Oops! I encountered a network error. Please verify the backend service is running.',
         created_at: new Date().toISOString()
       }]);
     } finally {
@@ -200,17 +198,17 @@ function App() {
     }
   };
 
-  // Cancel reservation
-  const handleCancelReservation = async (id) => {
-    if (!confirm('Are you sure you want to cancel this reservation?')) return;
+  // Cancel booking
+  const handleCancelBooking = async (id) => {
+    if (!confirm('Are you sure you want to cancel this booking?')) return;
     try {
-      const res = await fetch(`${API_BASE}/reservations/${id}`, {
-        method: 'DELETE'
+      const res = await fetch(`${API_BASE}/bookings/${id}/cancel`, {
+        method: 'POST'
       });
       if (res.ok) {
         fetchDatabaseData();
       } else {
-        alert('Failed to cancel reservation.');
+        alert('Failed to cancel booking.');
       }
     } catch (err) {
       console.error(err);
@@ -218,15 +216,13 @@ function App() {
     }
   };
 
-  // Quick Reply Suggestion Chips
   const suggestionChips = [
-    "What's on the menu?",
-    "Book a table for 4",
-    "List my reservations",
-    "Show drinks and desserts"
+    "What movies are playing?",
+    "Register me as a customer",
+    "Book tickets for Interstellar",
+    "View my bookings"
   ];
 
-  // Helper to format date strings
   const formatTime = (isoString) => {
     try {
       const date = new Date(isoString);
@@ -245,23 +241,30 @@ function App() {
     }
   };
 
-  // Filter menu items by category and search term
-  const filteredMenuItems = menuItems.filter(item => {
-    const matchesCategory = selectedMenuCategory === 'all' || item.category.toLowerCase() === selectedMenuCategory.toLowerCase();
-    const matchesSearch = item.name.toLowerCase().includes(menuSearchText.toLowerCase()) || 
-                          item.description.toLowerCase().includes(menuSearchText.toLowerCase());
-    return matchesCategory && matchesSearch;
+  // Filter shows by movie genre and search term
+  const filteredShows = shows.filter(show => {
+    const genre = show.movie?.genre || '';
+    const title = show.movie?.title || '';
+    const theatreName = show.theatre?.theatre_name || '';
+
+    const matchesGenre = selectedMovieGenre === 'all' || genre.toLowerCase() === selectedMovieGenre.toLowerCase();
+    const matchesSearch = title.toLowerCase().includes(movieSearchText.toLowerCase()) || 
+                          theatreName.toLowerCase().includes(movieSearchText.toLowerCase());
+    return matchesGenre && matchesSearch;
   });
+
+  // Extract unique genres for filter tabs
+  const genres = ['all', ...new Set(shows.map(s => s.movie?.genre).filter(Boolean))];
 
   return (
     <div className="app-container">
-      {/* 1. Left Sidebar */}
+      {/* Left Sidebar */}
       <aside className="sidebar">
         <div className="brand">
           <div className="brand-icon">
             <Sparkles size={20} />
           </div>
-          <span className="brand-name">Restaurant AI Receptionist</span>
+          <span className="brand-name">Cinema AI Receptionist</span>
         </div>
 
         <div className="sidebar-content">
@@ -288,18 +291,25 @@ function App() {
           <div style={{ marginTop: 'auto' }}>
             <div className="sidebar-nav">
               <div 
-                className={`nav-item ${activeTab === 'reservations' ? 'active' : ''}`}
-                onClick={() => setActiveTab('reservations')}
+                className={`nav-item ${activeTab === 'bookings' ? 'active' : ''}`}
+                onClick={() => setActiveTab('bookings')}
               >
-                <Calendar size={18} />
-                <span>Reservations</span>
+                <Ticket size={18} />
+                <span>Bookings Log</span>
               </div>
               <div 
-                className={`nav-item ${activeTab === 'menu' ? 'active' : ''}`}
-                onClick={() => setActiveTab('menu')}
+                className={`nav-item ${activeTab === 'movies' ? 'active' : ''}`}
+                onClick={() => setActiveTab('movies')}
               >
-                <Utensils size={18} />
-                <span>Menu Explorer</span>
+                <Film size={18} />
+                <span>Movies & Shows</span>
+              </div>
+              <div 
+                className={`nav-item ${activeTab === 'theatres' ? 'active' : ''}`}
+                onClick={() => setActiveTab('theatres')}
+              >
+                <Building size={18} />
+                <span>Theatres Directory</span>
               </div>
               <div 
                 className={`nav-item ${activeTab === 'customers' ? 'active' : ''}`}
@@ -320,13 +330,13 @@ function App() {
         </div>
       </aside>
 
-      {/* 2. Main Workspace */}
+      {/* Main Workspace */}
       <main className="main-workspace">
         {/* Center: Chat Application */}
         <section className="chat-container">
           <header className="chat-header">
             <div className="chat-header-info">
-              <h2>Restaurant AI Receptionist</h2>
+              <h2>Cinema AI Receptionist</h2>
               <p>Assistant active • Session ID: {sessionId}</p>
             </div>
             {dataError && (
@@ -347,7 +357,7 @@ function App() {
                 </div>
                 <div>
                   <div className="message-bubble">
-                    {msg.content}
+                    {msg.message}
                   </div>
                   <div className="message-time">
                     {msg.created_at ? formatTime(msg.created_at) : formatTime(new Date())}
@@ -390,7 +400,7 @@ function App() {
               <input 
                 type="text" 
                 className="chat-input"
-                placeholder="Ask about the menu, check bookings, or make a reservation..."
+                placeholder="Ask about movies, list showtimes, or book tickets..."
                 value={userInput}
                 onChange={(e) => setUserInput(e.target.value)}
                 disabled={isLoadingChat}
@@ -406,16 +416,22 @@ function App() {
         <section className="inspector-panel">
           <header className="inspector-header">
             <div className="inspector-title">
-              {activeTab === 'reservations' && (
+              {activeTab === 'bookings' && (
                 <>
-                  <Calendar className="inspector-icon" size={18} />
-                  <span>Reservations Log</span>
+                  <Ticket className="inspector-icon" size={18} />
+                  <span>Bookings Log</span>
                 </>
               )}
-              {activeTab === 'menu' && (
+              {activeTab === 'movies' && (
                 <>
-                  <Utensils className="inspector-icon" size={18} />
-                  <span>Menu Catalog</span>
+                  <Film className="inspector-icon" size={18} />
+                  <span>Movies & Shows Directory</span>
+                </>
+              )}
+              {activeTab === 'theatres' && (
+                <>
+                  <Building className="inspector-icon" size={18} />
+                  <span>Theatres Directory</span>
                 </>
               )}
               {activeTab === 'customers' && (
@@ -442,52 +458,60 @@ function App() {
               </div>
             )}
 
-            {/* TAB CONTENT: RESERVATIONS */}
-            {activeTab === 'reservations' && (
+            {/* TAB CONTENT: BOOKINGS */}
+            {activeTab === 'bookings' && (
               <div>
-                {reservations.length === 0 ? (
+                {bookings.length === 0 ? (
                   <div className="empty-state">
-                    <Calendar className="empty-icon" />
-                    <p className="empty-text">No reservations found in database.</p>
+                    <Ticket className="empty-icon" />
+                    <p className="empty-text">No bookings found in database.</p>
                   </div>
                 ) : (
-                  reservations.map(res => (
-                    <div key={res.id} className="data-card">
+                  bookings.map(b => (
+                    <div key={b.booking_id} className="data-card">
                       <div className="data-card-header">
-                        <span className="data-card-title">Booking #{res.id}</span>
-                        <span className={`badge ${res.status.toLowerCase()}`}>
-                          {res.status}
+                        <span className="data-card-title">Booking #{b.booking_id}</span>
+                        <span className={`badge ${b.booking_status.toLowerCase()}`}>
+                          {b.booking_status}
                         </span>
                       </div>
                       <div className="data-card-grid">
                         <div className="data-item">
                           <span className="data-label">Customer ID</span>
-                          <span className="data-value">{res.customer_id}</span>
+                          <span className="data-value">{b.customer_id} ({b.customer?.name || 'Loading...'})</span>
                         </div>
                         <div className="data-item">
-                          <span className="data-label">Party Size</span>
-                          <span className="data-value">{res.party_size} People</span>
+                          <span className="data-label">Tickets Count</span>
+                          <span className="data-value">{b.number_of_tickets} tickets</span>
+                        </div>
+                        <div className="data-item" style={{ gridColumn: 'span 2' }}>
+                          <span className="data-label">Movie / Show</span>
+                          <span className="data-value">
+                            "{b.show?.movie?.title || 'Unknown Movie'}" at {b.show?.theatre?.theatre_name || 'Unknown Theatre'} (Screen {b.show?.screen_number})
+                          </span>
                         </div>
                         <div className="data-item" style={{ gridColumn: 'span 2' }}>
                           <span className="data-label">Time</span>
-                          <span className="data-value">{formatDateDisplay(res.reservation_time)}</span>
+                          <span className="data-value">{b.show?.show_datetime ? formatDateDisplay(b.show.show_datetime) : 'N/A'}</span>
                         </div>
-                        {res.special_requests && (
-                          <div className="data-item" style={{ gridColumn: 'span 2' }}>
-                            <span className="data-label">Special Requests</span>
-                            <span className="data-value" style={{ fontStyle: 'italic' }}>
-                              "{res.special_requests}"
-                            </span>
-                          </div>
-                        )}
+                        <div className="data-item" style={{ gridColumn: 'span 2' }}>
+                          <span className="data-label">Seats Booked</span>
+                          <span className="data-value font-mono">{b.seat_numbers}</span>
+                        </div>
+                        <div className="data-item">
+                          <span className="data-label">Total Amount</span>
+                          <span className="data-value font-bold" style={{ color: 'var(--accent-secondary)' }}>
+                            ${parseFloat(b.total_amount).toFixed(2)}
+                          </span>
+                        </div>
                       </div>
-                      {res.status.toLowerCase() !== 'cancelled' && (
+                      {b.booking_status.toLowerCase() === 'confirmed' && (
                         <div className="data-card-actions">
                           <button 
                             className="btn-action-small danger"
-                            onClick={() => handleCancelReservation(res.id)}
+                            onClick={() => handleCancelBooking(b.booking_id)}
                           >
-                            Cancel Table
+                            Cancel Booking
                           </button>
                         </div>
                       )}
@@ -497,60 +521,96 @@ function App() {
               </div>
             )}
 
-            {/* TAB CONTENT: MENU EXPLORER */}
-            {activeTab === 'menu' && (
+            {/* TAB CONTENT: MOVIES & SHOWS */}
+            {activeTab === 'movies' && (
               <div>
                 {/* Search Bar */}
                 <div className="search-container">
                   <input 
                     type="text" 
                     className="form-input search-input" 
-                    placeholder="Search menu dishes..." 
-                    value={menuSearchText}
-                    onChange={(e) => setMenuSearchText(e.target.value)}
+                    placeholder="Search by movie or theatre..." 
+                    value={movieSearchText}
+                    onChange={(e) => setMovieSearchText(e.target.value)}
                   />
                 </div>
 
-                {/* Category Filters */}
+                {/* Genre Filters */}
                 <div className="category-tabs">
-                  {['all', 'Appetizers', 'Entrees', 'Desserts', 'Drinks'].map(cat => (
+                  {genres.map(g => (
                     <span 
-                      key={cat} 
-                      className={`cat-tab ${selectedMenuCategory === cat ? 'active' : ''}`}
-                      onClick={() => setSelectedMenuCategory(cat)}
+                      key={g} 
+                      className={`cat-tab ${selectedMovieGenre === g ? 'active' : ''}`}
+                      onClick={() => setSelectedMovieGenre(g)}
                     >
-                      {cat}
+                      {g}
                     </span>
                   ))}
                 </div>
 
-                {filteredMenuItems.length === 0 ? (
+                {filteredShows.length === 0 ? (
                   <div className="empty-state">
-                    <BookOpen className="empty-icon" />
-                    <p className="empty-text">No menu items match your selection.</p>
+                    <Film className="empty-icon" />
+                    <p className="empty-text">No shows found matching selection.</p>
                   </div>
                 ) : (
-                  filteredMenuItems.map(item => (
-                    <div key={item.id} className="data-card">
+                  filteredShows.map(show => (
+                    <div key={show.show_id} className="data-card">
                       <div className="data-card-header">
-                        <span className="data-card-title">{item.name}</span>
-                        <span className="data-value" style={{ color: 'var(--accent-secondary)', fontWeight: 'bold' }}>
-                          ${item.price.toFixed(2)}
+                        <span className="data-card-title">{show.movie?.title}</span>
+                        <span className="data-value font-bold" style={{ color: 'var(--accent-secondary)' }}>
+                          ${parseFloat(show.ticket_price).toFixed(2)}
                         </span>
                       </div>
                       <div style={{ fontSize: '0.8rem', color: 'var(--text-muted)', marginBottom: '8px' }}>
-                        {item.description}
+                        Genre: {show.movie?.genre} • Duration: {show.movie?.duration} • Rating: {show.movie?.rating}
                       </div>
                       <div className="data-card-grid">
-                        <div className="data-item">
-                          <span className="data-label">Category</span>
-                          <span className="data-value">{item.category}</span>
+                        <div className="data-item" style={{ gridColumn: 'span 2' }}>
+                          <span className="data-label">Theatre / Screen</span>
+                          <span className="data-value">{show.theatre?.theatre_name} (Screen {show.screen_number})</span>
+                        </div>
+                        <div className="data-item" style={{ gridColumn: 'span 2' }}>
+                          <span className="data-label">Showtime</span>
+                          <span className="data-value">{formatDateDisplay(show.show_datetime)}</span>
                         </div>
                         <div className="data-item">
-                          <span className="data-label">Status</span>
-                          <span className={`badge ${item.is_available ? 'available' : 'cancelled'}`} style={{ alignSelf: 'flex-start' }}>
-                            {item.is_available ? 'Available' : 'Unavailable'}
-                          </span>
+                          <span className="data-label">Available Seats</span>
+                          <span className="data-value">{show.available_seats} / {show.total_seats}</span>
+                        </div>
+                        <div className="data-item">
+                          <span className="data-label">Show ID</span>
+                          <span className="data-value">#{show.show_id}</span>
+                        </div>
+                      </div>
+                    </div>
+                  ))
+                )}
+              </div>
+            )}
+
+            {/* TAB CONTENT: THEATRES */}
+            {activeTab === 'theatres' && (
+              <div>
+                {theatres.length === 0 ? (
+                  <div className="empty-state">
+                    <Building className="empty-icon" />
+                    <p className="empty-text">No theatres registered.</p>
+                  </div>
+                ) : (
+                  theatres.map(t => (
+                    <div key={t.theatre_id} className="data-card">
+                      <div className="data-card-header">
+                        <span className="data-card-title">{t.theatre_name}</span>
+                      </div>
+                      <div className="data-card-grid" style={{ gridTemplateColumns: '1fr' }}>
+                        <div className="data-item">
+                          <span className="data-label">Location</span>
+                          <span className="data-value">{t.location}</span>
+                        </div>
+                        <div className="data-item">
+                          <span className="data-label">Total Screens</span>
+                          <span className="data-value">{t.screens} Screens</span>
                         </div>
                       </div>
                     </div>
@@ -569,17 +629,17 @@ function App() {
                   </div>
                 ) : (
                   customers.map(c => (
-                    <div key={c.id} className="data-card">
+                    <div key={c.customer_id} className="data-card">
                       <div className="data-card-header">
                         <span className="data-card-title" style={{ display: 'flex', alignItems: 'center', gap: '6px' }}>
                           <User size={14} style={{ color: 'var(--accent-primary)' }} />
-                          {c.name} (ID: {c.id})
+                          {c.name} (ID: {c.customer_id})
                         </span>
                       </div>
                       <div className="data-card-grid" style={{ gridTemplateColumns: '1fr' }}>
                         <div className="data-item">
                           <span className="data-label">Phone</span>
-                          <span className="data-value">{c.phone}</span>
+                          <span className="data-value">{c.phone_number}</span>
                         </div>
                         {c.email && (
                           <div className="data-item">
