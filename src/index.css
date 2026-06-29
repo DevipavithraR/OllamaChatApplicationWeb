@@ -805,3 +805,16 @@ body {
     display: none; /* Can toggle visibility on smaller layouts */
   }
 }
+
+.btn-action-small.safe {
+  background: var(--status-success-bg);
+  color: var(--status-success);
+  border: 1px solid rgba(16, 185, 129, 0.3);
+  cursor: pointer;
+  transition: var(--transition-smooth);
+}
+
+.btn-action-small.safe:hover {
+  background: var(--status-success);
+  color: white;
+}

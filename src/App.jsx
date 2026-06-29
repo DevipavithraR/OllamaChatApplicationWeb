@@ -2,7 +2,6 @@ import React, { useState, useEffect, useRef } from 'react';
 import { 
   MessageSquare, 
   Calendar, 
-  Utensils, 
   Users, 
   Send, 
   Plus, 
@@ -26,23 +25,21 @@ function App() {
   const [sessionList, setSessionList] = useState([]);
 
   // Database lists
-  const [reservations, setReservations] = useState([]);
-  const [menuItems, setMenuItems] = useState([]);
-  const [customers, setCustomers] = useState([]);
-  const [isLoadingData, setIsLoadingData] = useState(false);
+  const [issuedBooks, setIssuedBooks] = useState([]);
+  const [books, setBooks] = useState([]);
+  const [members, setMembers] = useState([]);
   const [dataError, setDataError] = useState(null);
 
   // Filter/Search states
-  const [activeTab, setActiveTab] = useState('reservations'); // reservations, menu, customers
-  const [selectedMenuCategory, setSelectedMenuCategory] = useState('all');
-  const [menuSearchText, setMenuSearchText] = useState('');
+  const [activeTab, setActiveTab] = useState('books'); // books, issued, members
+  const [selectedBookCategory, setSelectedBookCategory] = useState('all');
+  const [bookSearchText, setBookSearchText] = useState('');
 
   const messagesEndRef = useRef(null);
 
   // Initialize first session
   useEffect(() => {
-    // Load existing sessions from localStorage or create new
-    const savedSessions = JSON.parse(localStorage.getItem('restaurant_chat_sessions') || '[]');
+    const savedSessions = JSON.parse(localStorage.getItem('library_chat_sessions') || '[]');
     if (savedSessions.length > 0) {
       setSessionList(savedSessions);
       selectSession(savedSessions[0]);
@@ -56,7 +53,7 @@ function App() {
     messagesEndRef.current?.scrollIntoView({ behavior: 'smooth' });
   }, [messages, isLoadingChat]);
 
-  // Real-time polling for reservations, menu, customers
+  // Real-time polling for library data
   useEffect(() => {
     fetchDatabaseData();
     const interval = setInterval(() => {
@@ -69,24 +66,22 @@ function App() {
   // Fetch all lists from backend
   const fetchDatabaseData = async () => {
     try {
-      // Parallel fetches for speed
-      const [resReservations, resMenu, resCustomers] = await Promise.all([
-        fetch(`${API_BASE}/reservations/`),
-        fetch(`${API_BASE}/menu/`),
-        fetch(`${API_BASE}/customers/`)
+      const [resIssues, resBooks, resMembers] = await Promise.all([
+        fetch(`${API_BASE}/issued_books/`),
+        fetch(`${API_BASE}/books/`),
+        fetch(`${API_BASE}/members/`)
       ]);
 
-      if (resReservations.ok) {
-        const data = await resReservations.json();
-        // Sort reservations by created_at or reservation_time descending
-        setReservations(data.sort((a, b) => b.id - a.id));
+      if (resIssues.ok) {
+        const data = await resIssues.json();
+        setIssuedBooks(data.sort((a, b) => b.issue_id - a.issue_id));
       }
-      if (resMenu.ok) {
-        setMenuItems(await resMenu.json());
+      if (resBooks.ok) {
+        setBooks(await resBooks.json());
       }
-      if (resCustomers.ok) {
-        const data = await resCustomers.json();
-        setCustomers(data.sort((a, b) => b.id - a.id));
+      if (resMembers.ok) {
+        const data = await resMembers.json();
+        setMembers(data.sort((a, b) => b.member_id - a.member_id));
       }
       setDataError(null);
     } catch (err) {
@@ -102,7 +97,7 @@ function App() {
     setMessages([
       {
         sender: 'assistant',
-        content: "Ciao! I am your Restaurant AI Receptionist. 🍕\nHow can I help you today? I can tell you about our menu, register you as a customer, or book a table reservation!",
+        content: "Hello! I am your Digital Library Assistant. 📚\nHow can I help you today? I can search for books, check availability, register you as a member, issue/return books, or look up borrowing history and due dates!",
         created_at: new Date().toISOString()
       }
     ]);
@@ -110,7 +105,7 @@ function App() {
     // Save to list
     const updatedSessions = [newId, ...sessionList.filter(s => s !== newId)];
     setSessionList(updatedSessions);
-    localStorage.setItem('restaurant_chat_sessions', JSON.stringify(updatedSessions));
+    localStorage.setItem('library_chat_sessions', JSON.stringify(updatedSessions));
   };
 
   // Switch to an existing session and fetch its history
@@ -141,7 +136,7 @@ function App() {
     setMessages([
       {
         sender: 'assistant',
-        content: "Ciao! Welcome back. 🍕\nHow can I assist you with reservations or the menu today?",
+        content: "Hello! Welcome back. 📚\nHow can I assist you with searching books, checking due dates, or borrowing records today?",
         created_at: new Date().toISOString()
       }
     ]);
@@ -183,7 +178,7 @@ function App() {
           created_at: new Date().toISOString()
         }]);
 
-        // Trigger immediate pull of reservations/customers to reflect updates
+        // Trigger immediate pull of data to reflect updates
         fetchDatabaseData();
       } else {
         throw new Error('API Error');
@@ -192,7 +187,7 @@ function App() {
       console.error(err);
       setMessages(prev => [...prev, {
         sender: 'assistant',
-        content: 'Scusate! I encountered a network error. Please verify the backend service is running.',
+        content: 'I encountered a network error. Please verify the backend service is running and Ollama is online.',
         created_at: new Date().toISOString()
       }]);
     } finally {
@@ -200,17 +195,17 @@ function App() {
     }
   };
 
-  // Cancel reservation
-  const handleCancelReservation = async (id) => {
-    if (!confirm('Are you sure you want to cancel this reservation?')) return;
+  // Return issued book manually
+  const handleReturnBook = async (issueId) => {
+    if (!confirm('Are you sure you want to return this book?')) return;
     try {
-      const res = await fetch(`${API_BASE}/reservations/${id}`, {
-        method: 'DELETE'
+      const res = await fetch(`${API_BASE}/issued_books/${issueId}`, {
+        method: 'PUT'
       });
       if (res.ok) {
         fetchDatabaseData();
       } else {
-        alert('Failed to cancel reservation.');
+        alert('Failed to return book.');
       }
     } catch (err) {
       console.error(err);
@@ -218,15 +213,15 @@ function App() {
     }
   };
 
-  // Quick Reply Suggestion Chips
+  // Suggestion Chips
   const suggestionChips = [
-    "What's on the menu?",
-    "Book a table for 4",
-    "List my reservations",
-    "Show drinks and desserts"
+    "Search books on programming",
+    "Identify as Rahul Kumar (+919876543210)",
+    "Issue Clean Code for Rahul Kumar",
+    "Show borrowing history"
   ];
 
-  // Helper to format date strings
+  // Helper to format time
   const formatTime = (isoString) => {
     try {
       const date = new Date(isoString);
@@ -238,18 +233,20 @@ function App() {
 
   const formatDateDisplay = (dateString) => {
     try {
+      if (!dateString) return 'N/A';
       const date = new Date(dateString);
-      return date.toLocaleDateString([], { month: 'short', day: 'numeric', hour: '2-digit', minute: '2-digit' });
+      return date.toLocaleDateString([], { month: 'short', day: 'numeric', year: 'numeric' });
     } catch {
       return dateString;
     }
   };
 
-  // Filter menu items by category and search term
-  const filteredMenuItems = menuItems.filter(item => {
-    const matchesCategory = selectedMenuCategory === 'all' || item.category.toLowerCase() === selectedMenuCategory.toLowerCase();
-    const matchesSearch = item.name.toLowerCase().includes(menuSearchText.toLowerCase()) || 
-                          item.description.toLowerCase().includes(menuSearchText.toLowerCase());
+  // Filter books
+  const filteredBooks = books.filter(book => {
+    const matchesCategory = selectedBookCategory === 'all' || book.category.toLowerCase() === selectedBookCategory.toLowerCase();
+    const matchesSearch = book.title.toLowerCase().includes(bookSearchText.toLowerCase()) || 
+                          book.author.toLowerCase().includes(bookSearchText.toLowerCase()) ||
+                          book.isbn.toLowerCase().includes(bookSearchText.toLowerCase());
     return matchesCategory && matchesSearch;
   });
 
@@ -261,7 +258,7 @@ function App() {
           <div className="brand-icon">
             <Sparkles size={20} />
           </div>
-          <span className="brand-name">Restaurant AI Receptionist</span>
+          <span className="brand-name">Digital Library AI</span>
         </div>
 
         <div className="sidebar-content">
@@ -270,7 +267,7 @@ function App() {
           </button>
 
           <div>
-            <div className="section-title">Active Conversations</div>
+            <div className="section-title">Active Sessions</div>
             <div className="session-list">
               {sessionList.map(sid => (
                 <div 
@@ -288,25 +285,25 @@ function App() {
           <div style={{ marginTop: 'auto' }}>
             <div className="sidebar-nav">
               <div 
-                className={`nav-item ${activeTab === 'reservations' ? 'active' : ''}`}
-                onClick={() => setActiveTab('reservations')}
+                className={`nav-item ${activeTab === 'books' ? 'active' : ''}`}
+                onClick={() => setActiveTab('books')}
               >
-                <Calendar size={18} />
-                <span>Reservations</span>
+                <BookOpen size={18} />
+                <span>Book Explorer</span>
               </div>
               <div 
-                className={`nav-item ${activeTab === 'menu' ? 'active' : ''}`}
-                onClick={() => setActiveTab('menu')}
+                className={`nav-item ${activeTab === 'issued' ? 'active' : ''}`}
+                onClick={() => setActiveTab('issued')}
               >
-                <Utensils size={18} />
-                <span>Menu Explorer</span>
+                <Clock size={18} />
+                <span>Issued Books</span>
               </div>
               <div 
-                className={`nav-item ${activeTab === 'customers' ? 'active' : ''}`}
-                onClick={() => setActiveTab('customers')}
+                className={`nav-item ${activeTab === 'members' ? 'active' : ''}`}
+                onClick={() => setActiveTab('members')}
               >
                 <Users size={18} />
-                <span>Customers</span>
+                <span>Members Directory</span>
               </div>
             </div>
           </div>
@@ -322,11 +319,11 @@ function App() {
 
       {/* 2. Main Workspace */}
       <main className="main-workspace">
-        {/* Center: Chat Application */}
+        {/* Center: Chat Window */}
         <section className="chat-container">
           <header className="chat-header">
             <div className="chat-header-info">
-              <h2>Restaurant AI Receptionist</h2>
+              <h2>Library Digital Assistant</h2>
               <p>Assistant active • Session ID: {sessionId}</p>
             </div>
             {dataError && (
@@ -371,7 +368,7 @@ function App() {
             <div ref={messagesEndRef} />
           </div>
 
-          {/* Preset Chip Suggestions */}
+          {/* Suggested Questions */}
           <div className="suggestions-container">
             {suggestionChips.map((chip, index) => (
               <button 
@@ -390,7 +387,7 @@ function App() {
               <input 
                 type="text" 
                 className="chat-input"
-                placeholder="Ask about the menu, check bookings, or make a reservation..."
+                placeholder="Ask about books, issue or return a book, register, check due dates..."
                 value={userInput}
                 onChange={(e) => setUserInput(e.target.value)}
                 disabled={isLoadingChat}
@@ -406,22 +403,22 @@ function App() {
         <section className="inspector-panel">
           <header className="inspector-header">
             <div className="inspector-title">
-              {activeTab === 'reservations' && (
+              {activeTab === 'books' && (
                 <>
-                  <Calendar className="inspector-icon" size={18} />
-                  <span>Reservations Log</span>
+                  <BookOpen className="inspector-icon" size={18} />
+                  <span>Book Catalog</span>
                 </>
               )}
-              {activeTab === 'menu' && (
+              {activeTab === 'issued' && (
                 <>
-                  <Utensils className="inspector-icon" size={18} />
-                  <span>Menu Catalog</span>
+                  <Clock className="inspector-icon" size={18} />
+                  <span>Issued Books Log</span>
                 </>
               )}
-              {activeTab === 'customers' && (
+              {activeTab === 'members' && (
                 <>
                   <Users className="inspector-icon" size={18} />
-                  <span>Registered Customers</span>
+                  <span>Members List</span>
                 </>
               )}
             </div>
@@ -442,52 +439,121 @@ function App() {
               </div>
             )}
 
-            {/* TAB CONTENT: RESERVATIONS */}
-            {activeTab === 'reservations' && (
+            {/* TAB CONTENT: BOOKS */}
+            {activeTab === 'books' && (
               <div>
-                {reservations.length === 0 ? (
+                {/* Search Bar */}
+                <div className="search-container">
+                  <input 
+                    type="text" 
+                    className="form-input search-input" 
+                    placeholder="Search title, author, isbn..." 
+                    value={bookSearchText}
+                    onChange={(e) => setBookSearchText(e.target.value)}
+                  />
+                </div>
+
+                {/* Category Filters */}
+                <div className="category-tabs">
+                  {['all', 'Programming', 'Computer Science', 'AI/ML'].map(cat => (
+                    <span 
+                      key={cat} 
+                      className={`cat-tab ${selectedBookCategory === cat ? 'active' : ''}`}
+                      onClick={() => setSelectedBookCategory(cat)}
+                    >
+                      {cat}
+                    </span>
+                  ))}
+                </div>
+
+                {filteredBooks.length === 0 ? (
                   <div className="empty-state">
-                    <Calendar className="empty-icon" />
-                    <p className="empty-text">No reservations found in database.</p>
+                    <BookOpen className="empty-icon" />
+                    <p className="empty-text">No books match your selection.</p>
                   </div>
                 ) : (
-                  reservations.map(res => (
-                    <div key={res.id} className="data-card">
+                  filteredBooks.map(book => (
+                    <div key={book.book_id} className="data-card">
                       <div className="data-card-header">
-                        <span className="data-card-title">Booking #{res.id}</span>
-                        <span className={`badge ${res.status.toLowerCase()}`}>
+                        <span className="data-card-title">{book.title}</span>
+                        <span className={`badge ${book.available_copies > 0 ? 'available' : 'cancelled'}`}>
+                          {book.available_copies} / {book.total_copies} Left
+                        </span>
+                      </div>
+                      <div style={{ fontSize: '0.8rem', color: 'var(--accent-secondary)', fontWeight: 500, marginBottom: '4px' }}>
+                        by {book.author}
+                      </div>
+                      <div style={{ fontSize: '0.75rem', color: 'var(--text-muted)', marginBottom: '8px' }}>
+                        {book.description}
+                      </div>
+                      <div className="data-card-grid">
+                        <div className="data-item">
+                          <span className="data-label">ISBN</span>
+                          <span className="data-value">{book.isbn}</span>
+                        </div>
+                        <div className="data-item">
+                          <span className="data-label">Publisher</span>
+                          <span className="data-value">{book.publisher} ({book.publication_year})</span>
+                        </div>
+                        <div className="data-item">
+                          <span className="data-label">Category</span>
+                          <span className="data-value">{book.category}</span>
+                        </div>
+                      </div>
+                    </div>
+                  ))
+                )}
+              </div>
+            )}
+
+            {/* TAB CONTENT: ISSUED BOOKS */}
+            {activeTab === 'issued' && (
+              <div>
+                {issuedBooks.length === 0 ? (
+                  <div className="empty-state">
+                    <Calendar className="empty-icon" />
+                    <p className="empty-text">No issued books logs found.</p>
+                  </div>
+                ) : (
+                  issuedBooks.map(res => (
+                    <div key={res.issue_id} className="data-card">
+                      <div className="data-card-header">
+                        <span className="data-card-title">Issue ID #{res.issue_id}</span>
+                        <span className={`badge ${res.status.toLowerCase() === 'returned' ? 'available' : 'cancelled'}`}>
                           {res.status}
                         </span>
                       </div>
                       <div className="data-card-grid">
-                        <div className="data-item">
-                          <span className="data-label">Customer ID</span>
-                          <span className="data-value">{res.customer_id}</span>
-                        </div>
-                        <div className="data-item">
-                          <span className="data-label">Party Size</span>
-                          <span className="data-value">{res.party_size} People</span>
+                        <div className="data-item" style={{ gridColumn: 'span 2' }}>
+                          <span className="data-label">Book</span>
+                          <span className="data-value" style={{ color: 'var(--accent-primary)', fontWeight: 500 }}>{res.book_title}</span>
                         </div>
                         <div className="data-item" style={{ gridColumn: 'span 2' }}>
-                          <span className="data-label">Time</span>
-                          <span className="data-value">{formatDateDisplay(res.reservation_time)}</span>
+                          <span className="data-label">Borrower</span>
+                          <span className="data-value">{res.member_name} (ID: {res.member_id})</span>
                         </div>
-                        {res.special_requests && (
+                        <div className="data-item">
+                          <span className="data-label">Issued</span>
+                          <span className="data-value">{formatDateDisplay(res.issue_date)}</span>
+                        </div>
+                        <div className="data-item">
+                          <span className="data-label">Due Date</span>
+                          <span className="data-value" style={{ color: 'var(--status-warning)' }}>{formatDateDisplay(res.due_date)}</span>
+                        </div>
+                        {res.return_date && (
                           <div className="data-item" style={{ gridColumn: 'span 2' }}>
-                            <span className="data-label">Special Requests</span>
-                            <span className="data-value" style={{ fontStyle: 'italic' }}>
-                              "{res.special_requests}"
-                            </span>
+                            <span className="data-label">Returned Date</span>
+                            <span className="data-value">{formatDateDisplay(res.return_date)}</span>
                           </div>
                         )}
                       </div>
-                      {res.status.toLowerCase() !== 'cancelled' && (
+                      {res.status.toLowerCase() === 'issued' && (
                         <div className="data-card-actions">
                           <button 
-                            className="btn-action-small danger"
-                            onClick={() => handleCancelReservation(res.id)}
+                            className="btn-action-small safe"
+                            onClick={() => handleReturnBook(res.issue_id)}
                           >
-                            Cancel Table
+                            Return Book
                           </button>
                         </div>
                       )}
@@ -497,99 +563,44 @@ function App() {
               </div>
             )}
 
-            {/* TAB CONTENT: MENU EXPLORER */}
-            {activeTab === 'menu' && (
+            {/* TAB CONTENT: MEMBERS */}
+            {activeTab === 'members' && (
               <div>
-                {/* Search Bar */}
-                <div className="search-container">
-                  <input 
-                    type="text" 
-                    className="form-input search-input" 
-                    placeholder="Search menu dishes..." 
-                    value={menuSearchText}
-                    onChange={(e) => setMenuSearchText(e.target.value)}
-                  />
-                </div>
-
-                {/* Category Filters */}
-                <div className="category-tabs">
-                  {['all', 'Appetizers', 'Entrees', 'Desserts', 'Drinks'].map(cat => (
-                    <span 
-                      key={cat} 
-                      className={`cat-tab ${selectedMenuCategory === cat ? 'active' : ''}`}
-                      onClick={() => setSelectedMenuCategory(cat)}
-                    >
-                      {cat}
-                    </span>
-                  ))}
-                </div>
-
-                {filteredMenuItems.length === 0 ? (
-                  <div className="empty-state">
-                    <BookOpen className="empty-icon" />
-                    <p className="empty-text">No menu items match your selection.</p>
-                  </div>
-                ) : (
-                  filteredMenuItems.map(item => (
-                    <div key={item.id} className="data-card">
-                      <div className="data-card-header">
-                        <span className="data-card-title">{item.name}</span>
-                        <span className="data-value" style={{ color: 'var(--accent-secondary)', fontWeight: 'bold' }}>
-                          ${item.price.toFixed(2)}
-                        </span>
-                      </div>
-                      <div style={{ fontSize: '0.8rem', color: 'var(--text-muted)', marginBottom: '8px' }}>
-                        {item.description}
-                      </div>
-                      <div className="data-card-grid">
-                        <div className="data-item">
-                          <span className="data-label">Category</span>
-                          <span className="data-value">{item.category}</span>
-                        </div>
-                        <div className="data-item">
-                          <span className="data-label">Status</span>
-                          <span className={`badge ${item.is_available ? 'available' : 'cancelled'}`} style={{ alignSelf: 'flex-start' }}>
-                            {item.is_available ? 'Available' : 'Unavailable'}
-                          </span>
-                        </div>
-                      </div>
-                    </div>
-                  ))
-                )}
-              </div>
-            )}
-
-            {/* TAB CONTENT: CUSTOMERS */}
-            {activeTab === 'customers' && (
-              <div>
-                {customers.length === 0 ? (
+                {members.length === 0 ? (
                   <div className="empty-state">
                     <Users className="empty-icon" />
-                    <p className="empty-text">No registered customers yet.</p>
+                    <p className="empty-text">No registered members yet.</p>
                   </div>
                 ) : (
-                  customers.map(c => (
-                    <div key={c.id} className="data-card">
+                  members.map(m => (
+                    <div key={m.member_id} className="data-card">
                       <div className="data-card-header">
                         <span className="data-card-title" style={{ display: 'flex', alignItems: 'center', gap: '6px' }}>
                           <User size={14} style={{ color: 'var(--accent-primary)' }} />
-                          {c.name} (ID: {c.id})
+                          {m.name}
+                        </span>
+                        <span className="badge available">
+                          {m.membership_type}
                         </span>
                       </div>
                       <div className="data-card-grid" style={{ gridTemplateColumns: '1fr' }}>
                         <div className="data-item">
-                          <span className="data-label">Phone</span>
-                          <span className="data-value">{c.phone}</span>
+                          <span className="data-label">Member ID</span>
+                          <span className="data-value">{m.member_id}</span>
                         </div>
-                        {c.email && (
+                        <div className="data-item">
+                          <span className="data-label">Phone</span>
+                          <span className="data-value">{m.phone_number}</span>
+                        </div>
+                        {m.email && (
                           <div className="data-item">
                             <span className="data-label">Email</span>
-                            <span className="data-value">{c.email}</span>
+                            <span className="data-value">{m.email}</span>
                           </div>
                         )}
                         <div className="data-item">
                           <span className="data-label">Registered Date</span>
-                          <span className="data-value">{new Date(c.created_at).toLocaleDateString()}</span>
+                          <span className="data-value">{formatDateDisplay(m.registration_date)}</span>
                         </div>
                       </div>
                     </div>
