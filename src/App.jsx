@@ -2,16 +2,18 @@ import React, { useState, useEffect, useRef } from 'react';
 import { 
   MessageSquare, 
   Calendar, 
-  Utensils, 
   Users, 
   Send, 
   Plus, 
   RefreshCw, 
-  Clock, 
   User, 
-  Sparkles, 
   BookOpen,
-  Heart
+  GraduationCap,
+  Sparkles,
+  Percent,
+  MapPin,
+  Mail,
+  Phone
 } from 'lucide-react';
 
 const API_BASE = 'http://localhost:8000';
@@ -25,24 +27,23 @@ function App() {
   const [sessionList, setSessionList] = useState([]);
 
   // Database lists
-  const [appointments, setAppointments] = useState([]);
-  const [doctors, setDoctors] = useState([]);
+  const [admissions, setAdmissions] = useState([]);
+  const [courses, setCourses] = useState([]);
   const [departments, setDepartments] = useState([]);
-  const [patients, setPatients] = useState([]);
-  const [isLoadingData, setIsLoadingData] = useState(false);
+  const [students, setStudents] = useState([]);
   const [dataError, setDataError] = useState(null);
 
   // Filter/Search states
-  const [activeTab, setActiveTab] = useState('appointments'); // appointments, doctors, departments, patients
-  const [selectedDoctorDept, setSelectedDoctorDept] = useState('all');
-  const [doctorSearchText, setDoctorSearchText] = useState('');
+  const [activeTab, setActiveTab] = useState('admissions'); // admissions, courses, departments, students
+  const [selectedCourseDept, setSelectedCourseDept] = useState('all');
+  const [courseSearchText, setCourseSearchText] = useState('');
 
   const messagesEndRef = useRef(null);
 
   // Initialize first session
   useEffect(() => {
     // Load existing sessions from localStorage or create new
-    const savedSessions = JSON.parse(localStorage.getItem('hospital_chat_sessions') || '[]');
+    const savedSessions = JSON.parse(localStorage.getItem('college_chat_sessions') || '[]');
     if (savedSessions.length > 0) {
       setSessionList(savedSessions);
       selectSession(savedSessions[0]);
@@ -56,7 +57,7 @@ function App() {
     messagesEndRef.current?.scrollIntoView({ behavior: 'smooth' });
   }, [messages, isLoadingChat]);
 
-  // Real-time polling for appointments, doctors, departments, patients
+  // Real-time polling for admissions, courses, departments, students
   useEffect(() => {
     fetchDatabaseData();
     const interval = setInterval(() => {
@@ -70,27 +71,27 @@ function App() {
   const fetchDatabaseData = async () => {
     try {
       // Parallel fetches for speed
-      const [resAppointments, resDoctors, resDepartments, resPatients] = await Promise.all([
-        fetch(`${API_BASE}/appointments/`),
-        fetch(`${API_BASE}/doctors/`),
+      const [resAdmissions, resCourses, resDepartments, resStudents] = await Promise.all([
+        fetch(`${API_BASE}/admissions/`),
+        fetch(`${API_BASE}/courses/`),
         fetch(`${API_BASE}/departments/`),
-        fetch(`${API_BASE}/patients/`)
+        fetch(`${API_BASE}/students/`)
       ]);
 
-      if (resAppointments.ok) {
-        const data = await resAppointments.json();
-        // Sort appointments by created_at or appointment_datetime descending
-        setAppointments(data.sort((a, b) => b.appointment_id - a.appointment_id));
+      if (resAdmissions.ok) {
+        const data = await resAdmissions.json();
+        // Sort admissions by ID descending
+        setAdmissions(data.sort((a, b) => b.admission_id - a.admission_id));
       }
-      if (resDoctors.ok) {
-        setDoctors(await resDoctors.json());
+      if (resCourses.ok) {
+        setCourses(await resCourses.json());
       }
       if (resDepartments.ok) {
         setDepartments(await resDepartments.json());
       }
-      if (resPatients.ok) {
-        const data = await resPatients.json();
-        setPatients(data.sort((a, b) => b.patient_id - a.patient_id));
+      if (resStudents.ok) {
+        const data = await resStudents.json();
+        setStudents(data.sort((a, b) => b.student_id - a.student_id));
       }
       setDataError(null);
     } catch (err) {
@@ -106,7 +107,7 @@ function App() {
     setMessages([
       {
         sender: 'assistant',
-        message: "Hello! I am your Hope Hospital AI Receptionist. 🏥\nHow can I help you today? I can help you find doctors, explain our departments, register you as a patient, or book, reschedule, or cancel appointments!",
+        message: "Hello! I am your AI College Admission Assistant. 🎓\nHow can I help you today? I can answer questions about B.Tech/M.Tech courses, explain departments, display eligibility and fees, check seat availability, or register and submit your admission application!",
         created_at: new Date().toISOString()
       }
     ]);
@@ -114,7 +115,7 @@ function App() {
     // Save to list
     const updatedSessions = [newId, ...sessionList.filter(s => s !== newId)];
     setSessionList(updatedSessions);
-    localStorage.setItem('hospital_chat_sessions', JSON.stringify(updatedSessions));
+    localStorage.setItem('college_chat_sessions', JSON.stringify(updatedSessions));
   };
 
   // Switch to an existing session and fetch its history
@@ -145,7 +146,7 @@ function App() {
     setMessages([
       {
         sender: 'assistant',
-        message: "Hello! Welcome back. 🏥\nHow can I assist you with appointments or doctors today?",
+        message: "Hello! Welcome back. 🎓\nHow can I assist you with college admissions or course details today?",
         created_at: new Date().toISOString()
       }
     ]);
@@ -187,7 +188,7 @@ function App() {
           created_at: new Date().toISOString()
         }]);
 
-        // Trigger immediate pull of appointments/patients to reflect updates
+        // Trigger immediate pull to reflect database updates
         fetchDatabaseData();
       } else {
         throw new Error('API Error');
@@ -204,17 +205,17 @@ function App() {
     }
   };
 
-  // Cancel appointment
-  const handleCancelAppointment = async (id) => {
-    if (!confirm('Are you sure you want to cancel this appointment?')) return;
+  // Cancel admission application
+  const handleCancelAdmission = async (id) => {
+    if (!confirm('Are you sure you want to cancel this admission application?')) return;
     try {
-      const res = await fetch(`${API_BASE}/appointments/${id}`, {
+      const res = await fetch(`${API_BASE}/admissions/${id}`, {
         method: 'DELETE'
       });
       if (res.ok) {
         fetchDatabaseData();
       } else {
-        alert('Failed to cancel appointment.');
+        alert('Failed to cancel admission application.');
       }
     } catch (err) {
       console.error(err);
@@ -224,13 +225,13 @@ function App() {
 
   // Quick Reply Suggestion Chips
   const suggestionChips = [
-    "Who are the cardiologists?",
-    "Register me as a patient",
-    "Book an appointment with Dr. Priya",
-    "View my upcoming appointments"
+    "What B.Tech courses are available?",
+    "Tell me about the CS Department",
+    "Show course fees and eligibility",
+    "Check seat availability in CS"
   ];
 
-  // Helper to format date strings
+  // Helper to format date/time
   const formatTime = (isoString) => {
     try {
       const date = new Date(isoString);
@@ -243,18 +244,20 @@ function App() {
   const formatDateDisplay = (dateString) => {
     try {
       const date = new Date(dateString);
-      return date.toLocaleDateString([], { month: 'short', day: 'numeric', hour: '2-digit', minute: '2-digit' });
+      return date.toLocaleDateString([], { year: 'numeric', month: 'short', day: 'numeric' });
     } catch {
       return dateString;
     }
   };
 
-  // Filter doctors by department and search term
-  const filteredDoctors = doctors.filter(doc => {
-    const matchesDept = selectedDoctorDept === 'all' || doc.department.toLowerCase() === selectedDoctorDept.toLowerCase();
-    const matchesSearch = doc.name.toLowerCase().includes(doctorSearchText.toLowerCase()) || 
-                          doc.specialization.toLowerCase().includes(doctorSearchText.toLowerCase()) ||
-                          doc.department.toLowerCase().includes(doctorSearchText.toLowerCase());
+  // Filter courses by department and search term
+  const filteredCourses = courses.filter(course => {
+    const matchesDept = selectedCourseDept === 'all' || 
+                        course.department_id.toString() === selectedCourseDept ||
+                        (course.department && course.department.department_name.toLowerCase().includes(selectedCourseDept.toLowerCase()));
+    const matchesSearch = course.course_name.toLowerCase().includes(courseSearchText.toLowerCase()) || 
+                          course.eligibility.toLowerCase().includes(courseSearchText.toLowerCase()) ||
+                          (course.description && course.description.toLowerCase().includes(courseSearchText.toLowerCase()));
     return matchesDept && matchesSearch;
   });
 
@@ -264,9 +267,9 @@ function App() {
       <aside className="sidebar">
         <div className="brand">
           <div className="brand-icon">
-            <Heart size={20} style={{ color: 'var(--accent-primary)' }} />
+            <GraduationCap size={20} style={{ color: 'var(--accent-primary)' }} />
           </div>
-          <span className="brand-name">Hope AI Receptionist</span>
+          <span className="brand-name">College AI Counselor</span>
         </div>
 
         <div className="sidebar-content">
@@ -275,7 +278,7 @@ function App() {
           </button>
 
           <div>
-            <div className="section-title">Active Conversations</div>
+            <div className="section-title">Admission Sessions</div>
             <div className="session-list">
               {sessionList.map(sid => (
                 <div 
@@ -293,18 +296,18 @@ function App() {
           <div style={{ marginTop: 'auto' }}>
             <div className="sidebar-nav">
               <div 
-                className={`nav-item ${activeTab === 'appointments' ? 'active' : ''}`}
-                onClick={() => setActiveTab('appointments')}
+                className={`nav-item ${activeTab === 'admissions' ? 'active' : ''}`}
+                onClick={() => setActiveTab('admissions')}
               >
                 <Calendar size={18} />
-                <span>Appointments Log</span>
+                <span>Admissions Log</span>
               </div>
               <div 
-                className={`nav-item ${activeTab === 'doctors' ? 'active' : ''}`}
-                onClick={() => setActiveTab('doctors')}
+                className={`nav-item ${activeTab === 'courses' ? 'active' : ''}`}
+                onClick={() => setActiveTab('courses')}
               >
-                <User size={18} />
-                <span>Doctors Directory</span>
+                <GraduationCap size={18} />
+                <span>Courses Offered</span>
               </div>
               <div 
                 className={`nav-item ${activeTab === 'departments' ? 'active' : ''}`}
@@ -314,11 +317,11 @@ function App() {
                 <span>Departments</span>
               </div>
               <div 
-                className={`nav-item ${activeTab === 'patients' ? 'active' : ''}`}
-                onClick={() => setActiveTab('patients')}
+                className={`nav-item ${activeTab === 'students' ? 'active' : ''}`}
+                onClick={() => setActiveTab('students')}
               >
                 <Users size={18} />
-                <span>Patients Log</span>
+                <span>Students Database</span>
               </div>
             </div>
           </div>
@@ -338,7 +341,7 @@ function App() {
         <section className="chat-container">
           <header className="chat-header">
             <div className="chat-header-info">
-              <h2>Hospital AI Receptionist</h2>
+              <h2>College Admission Counselor</h2>
               <p>Assistant active • Session ID: {sessionId}</p>
             </div>
             {dataError && (
@@ -355,10 +358,10 @@ function App() {
                 className={`message-wrapper ${msg.sender === 'user' ? 'user' : 'assistant'}`}
               >
                 <div className="avatar">
-                  {msg.sender === 'user' ? 'U' : 'B'}
+                  {msg.sender === 'user' ? 'U' : 'C'}
                 </div>
                 <div>
-                  <div className="message-bubble">
+                  <div className="message-bubble" style={{ whiteSpace: 'pre-wrap' }}>
                     {msg.message}
                   </div>
                   <div className="message-time">
@@ -370,7 +373,7 @@ function App() {
             
             {isLoadingChat && (
               <div className="message-wrapper assistant">
-                <div className="avatar">B</div>
+                <div className="avatar">C</div>
                 <div className="message-bubble" style={{ padding: '12px' }}>
                   <div className="typing-indicator">
                     <span className="typing-dot"></span>
@@ -402,7 +405,7 @@ function App() {
               <input 
                 type="text" 
                 className="chat-input"
-                placeholder="Ask about doctors, explain departments, book appointments..."
+                placeholder="Ask about courses, fees, available seats, register and apply for admission..."
                 value={userInput}
                 onChange={(e) => setUserInput(e.target.value)}
                 disabled={isLoadingChat}
@@ -418,16 +421,16 @@ function App() {
         <section className="inspector-panel">
           <header className="inspector-header">
             <div className="inspector-title">
-              {activeTab === 'appointments' && (
+              {activeTab === 'admissions' && (
                 <>
                   <Calendar className="inspector-icon" size={18} />
-                  <span>Appointments Log</span>
+                  <span>Admissions Log</span>
                 </>
               )}
-              {activeTab === 'doctors' && (
+              {activeTab === 'courses' && (
                 <>
-                  <User className="inspector-icon" size={18} />
-                  <span>Doctors Directory</span>
+                  <GraduationCap className="inspector-icon" size={18} />
+                  <span>Courses Offered</span>
                 </>
               )}
               {activeTab === 'departments' && (
@@ -436,10 +439,10 @@ function App() {
                   <span>Departments Catalog</span>
                 </>
               )}
-              {activeTab === 'patients' && (
+              {activeTab === 'students' && (
                 <>
                   <Users className="inspector-icon" size={18} />
-                  <span>Patients Directory</span>
+                  <span>Students Directory</span>
                 </>
               )}
             </div>
@@ -460,52 +463,60 @@ function App() {
               </div>
             )}
 
-            {/* TAB CONTENT: APPOINTMENTS */}
-            {activeTab === 'appointments' && (
+            {/* TAB CONTENT: ADMISSIONS */}
+            {activeTab === 'admissions' && (
               <div>
-                {appointments.length === 0 ? (
+                {admissions.length === 0 ? (
                   <div className="empty-state">
                     <Calendar className="empty-icon" />
-                    <p className="empty-text">No appointments found in database.</p>
+                    <p className="empty-text">No admission applications found.</p>
                   </div>
                 ) : (
-                  appointments.map(app => (
-                    <div key={app.appointment_id} className="data-card">
+                  admissions.map(adm => (
+                    <div key={adm.admission_id} className="data-card">
                       <div className="data-card-header">
-                        <span className="data-card-title">Appointment #{app.appointment_id}</span>
-                        <span className={`badge ${app.status.toLowerCase()}`}>
-                          {app.status}
+                        <span className="data-card-title">Application #{adm.admission_id}</span>
+                        <span className={`badge ${adm.status === 'Cancelled' ? 'cancelled' : 'confirmed'}`}>
+                          {adm.status}
                         </span>
                       </div>
                       <div className="data-card-grid">
                         <div className="data-item">
-                          <span className="data-label">Patient ID</span>
-                          <span className="data-value">{app.patient_id}</span>
+                          <span className="data-label">Student ID</span>
+                          <span className="data-value">{adm.student_id}</span>
                         </div>
                         <div className="data-item">
-                          <span className="data-label">Doctor</span>
-                          <span className="data-value">{app.doctor ? app.doctor.name : `Doctor ID ${app.doctor_id}`}</span>
+                          <span className="data-label">Student Name</span>
+                          <span className="data-value">{adm.student ? adm.student.name : 'N/A'}</span>
                         </div>
                         <div className="data-item" style={{ gridColumn: 'span 2' }}>
-                          <span className="data-label">Date & Time</span>
-                          <span className="data-value">{formatDateDisplay(app.appointment_datetime)}</span>
+                          <span className="data-label">Course Applied</span>
+                          <span className="data-value">{adm.course ? adm.course.course_name : `Course ID ${adm.course_id}`}</span>
                         </div>
-                        {app.special_notes && (
+                        <div className="data-item">
+                          <span className="data-label">Application Date</span>
+                          <span className="data-value">{formatDateDisplay(adm.application_date)}</span>
+                        </div>
+                        <div className="data-item">
+                          <span className="data-label">Marks Percentage</span>
+                          <span className="data-value">{adm.student && adm.student.marks_percentage ? `${adm.student.marks_percentage}%` : 'N/A'}</span>
+                        </div>
+                        {adm.remarks && (
                           <div className="data-item" style={{ gridColumn: 'span 2' }}>
-                            <span className="data-label">Notes/Symptoms</span>
+                            <span className="data-label">Remarks</span>
                             <span className="data-value" style={{ fontStyle: 'italic' }}>
-                              "{app.special_notes}"
+                              "{adm.remarks}"
                             </span>
                           </div>
                         )}
                       </div>
-                      {app.status.toLowerCase() !== 'cancelled' && (
+                      {adm.status !== 'Cancelled' && (
                         <div className="data-card-actions">
                           <button 
                             className="btn-action-small danger"
-                            onClick={() => handleCancelAppointment(app.appointment_id)}
+                            onClick={() => handleCancelAdmission(adm.admission_id)}
                           >
-                            Cancel Appointment
+                            Cancel Application
                           </button>
                         </div>
                       )}
@@ -515,59 +526,67 @@ function App() {
               </div>
             )}
 
-            {/* TAB CONTENT: DOCTORS DIRECTORY */}
-            {activeTab === 'doctors' && (
+            {/* TAB CONTENT: COURSES */}
+            {activeTab === 'courses' && (
               <div>
                 {/* Search Bar */}
                 <div className="search-container">
                   <input 
                     type="text" 
                     className="form-input search-input" 
-                    placeholder="Search doctor or specialization..." 
-                    value={doctorSearchText}
-                    onChange={(e) => setDoctorSearchText(e.target.value)}
+                    placeholder="Search courses or criteria..." 
+                    value={courseSearchText}
+                    onChange={(e) => setCourseSearchText(e.target.value)}
                   />
                 </div>
 
                 {/* Department Filters */}
                 <div className="category-tabs">
-                  {['all', 'Cardiology', 'Pediatrics', 'Orthopedics', 'Neurology', 'General Medicine'].map(dept => (
+                  <span 
+                    className={`cat-tab ${selectedCourseDept === 'all' ? 'active' : ''}`}
+                    onClick={() => setSelectedCourseDept('all')}
+                  >
+                    All
+                  </span>
+                  {departments.map(dept => (
                     <span 
-                      key={dept} 
-                      className={`cat-tab ${selectedDoctorDept === dept ? 'active' : ''}`}
-                      onClick={() => setSelectedDoctorDept(dept)}
+                      key={dept.department_id} 
+                      className={`cat-tab ${selectedCourseDept === dept.department_id.toString() ? 'active' : ''}`}
+                      onClick={() => setSelectedCourseDept(dept.department_id.toString())}
                     >
-                      {dept}
+                      {dept.department_name.replace(' Department', '')}
                     </span>
                   ))}
                 </div>
 
-                {filteredDoctors.length === 0 ? (
+                {filteredCourses.length === 0 ? (
                   <div className="empty-state">
-                    <User className="empty-icon" />
-                    <p className="empty-text">No doctors match your selection.</p>
+                    <GraduationCap className="empty-icon" />
+                    <p className="empty-text">No courses match your selection.</p>
                   </div>
                 ) : (
-                  filteredDoctors.map(doc => (
-                    <div key={doc.doctor_id} className="data-card">
+                  filteredCourses.map(c => (
+                    <div key={c.course_id} className="data-card">
                       <div className="data-card-header">
-                        <span className="data-card-title">{doc.name}</span>
+                        <span className="data-card-title">{c.course_name}</span>
                         <span className="data-value" style={{ color: 'var(--accent-secondary)', fontWeight: 'bold' }}>
-                          ₹{doc.consultation_fee}
+                          ₹{parseInt(c.fees).toLocaleString()} / yr
                         </span>
                       </div>
                       <div style={{ fontSize: '0.8rem', color: 'var(--text-muted)', marginBottom: '8px' }}>
-                        {doc.specialization} • {doc.experience} Years Experience
+                        Duration: {c.duration} • Seats: {c.available_seats} available (of {c.total_seats})
                       </div>
                       <div className="data-card-grid">
-                        <div className="data-item">
-                          <span className="data-label">Available Days</span>
-                          <span className="data-value">{doc.available_days}</span>
+                        <div className="data-item" style={{ gridColumn: 'span 2' }}>
+                          <span className="data-label">Eligibility Criteria</span>
+                          <span className="data-value" style={{ color: 'var(--status-warning)', fontWeight: 500 }}>{c.eligibility}</span>
                         </div>
-                        <div className="data-item">
-                          <span className="data-label">Available Time</span>
-                          <span className="data-value">{doc.available_time}</span>
-                        </div>
+                        {c.description && (
+                          <div className="data-item" style={{ gridColumn: 'span 2' }}>
+                            <span className="data-label">Course Focus</span>
+                            <span className="data-value">{c.description}</span>
+                          </div>
+                        )}
                       </div>
                     </div>
                   ))
@@ -589,6 +608,9 @@ function App() {
                       <div className="data-card-header">
                         <span className="data-card-title">{dept.department_name}</span>
                       </div>
+                      <div style={{ fontSize: '0.8rem', color: 'var(--text-main)', marginBottom: '6px', fontWeight: 500 }}>
+                        Head: {dept.head_of_department || 'N/A'}
+                      </div>
                       <div style={{ fontSize: '0.8rem', color: 'var(--text-muted)' }}>
                         {dept.description}
                       </div>
@@ -598,47 +620,58 @@ function App() {
               </div>
             )}
 
-            {/* TAB CONTENT: PATIENTS */}
-            {activeTab === 'patients' && (
+            {/* TAB CONTENT: STUDENTS */}
+            {activeTab === 'students' && (
               <div>
-                {patients.length === 0 ? (
+                {students.length === 0 ? (
                   <div className="empty-state">
                     <Users className="empty-icon" />
-                    <p className="empty-text">No registered patients yet.</p>
+                    <p className="empty-text">No registered students yet.</p>
                   </div>
                 ) : (
-                  patients.map(p => (
-                    <div key={p.patient_id} className="data-card">
+                  students.map(s => (
+                    <div key={s.student_id} className="data-card">
                       <div className="data-card-header">
                         <span className="data-card-title" style={{ display: 'flex', alignItems: 'center', gap: '6px' }}>
                           <User size={14} style={{ color: 'var(--accent-primary)' }} />
-                          {p.name} (ID: {p.patient_id})
+                          {s.name} (ID: {s.student_id})
                         </span>
+                        {s.marks_percentage && (
+                          <span className="badge confirmed" style={{ background: 'var(--accent-secondary-glow)', color: 'var(--accent-secondary)' }}>
+                            {s.marks_percentage}%
+                          </span>
+                        )}
                       </div>
                       <div className="data-card-grid" style={{ gridTemplateColumns: '1fr' }}>
-                        <div className="data-item">
-                          <span className="data-label">Phone</span>
-                          <span className="data-value">{p.phone_number}</span>
+                        <div className="data-item" style={{ display: 'flex', alignItems: 'center', gap: '8px' }}>
+                          <Phone size={12} className="data-label" />
+                          <span className="data-value">{s.phone_number}</span>
                         </div>
-                        {p.email && (
-                          <div className="data-item">
-                            <span className="data-label">Email</span>
-                            <span className="data-value">{p.email}</span>
+                        {s.email && (
+                          <div className="data-item" style={{ display: 'flex', alignItems: 'center', gap: '8px' }}>
+                            <Mail size={12} className="data-label" />
+                            <span className="data-value">{s.email}</span>
                           </div>
                         )}
                         <div className="data-item" style={{ display: 'flex', gap: '15px' }}>
                           <div>
-                            <span className="data-label">Age</span>
-                            <span className="data-value">{p.age || 'N/A'}</span>
+                            <span className="data-label">DOB</span>
+                            <span className="data-value">{s.date_of_birth ? formatDateDisplay(s.date_of_birth) : 'N/A'}</span>
                           </div>
                           <div>
                             <span className="data-label">Gender</span>
-                            <span className="data-value">{p.gender || 'N/A'}</span>
+                            <span className="data-value">{s.gender || 'N/A'}</span>
                           </div>
                         </div>
+                        {s.address && (
+                          <div className="data-item" style={{ display: 'flex', alignItems: 'flex-start', gap: '8px' }}>
+                            <MapPin size={12} className="data-label" style={{ marginTop: '2px' }} />
+                            <span className="data-value">{s.address}</span>
+                          </div>
+                        )}
                         <div className="data-item">
                           <span className="data-label">Registered Date</span>
-                          <span className="data-value">{new Date(p.created_at).toLocaleDateString()}</span>
+                          <span className="data-value">{new Date(s.created_at).toLocaleDateString()}</span>
                         </div>
                       </div>
                     </div>
