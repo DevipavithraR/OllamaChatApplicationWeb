@@ -2,7 +2,7 @@ import React, { useState, useEffect, useRef } from 'react';
 import { 
   MessageSquare, 
   Calendar, 
-  Utensils, 
+  Dumbbell, 
   Users, 
   Send, 
   Plus, 
@@ -12,7 +12,7 @@ import {
   User, 
   Sparkles, 
   Search, 
-  BookOpen 
+  Award 
 } from 'lucide-react';
 
 const API_BASE = 'http://localhost:8000';
@@ -26,23 +26,22 @@ function App() {
   const [sessionList, setSessionList] = useState([]);
 
   // Database lists
-  const [reservations, setReservations] = useState([]);
-  const [menuItems, setMenuItems] = useState([]);
-  const [customers, setCustomers] = useState([]);
-  const [isLoadingData, setIsLoadingData] = useState(false);
+  const [trainerBookings, setTrainerBookings] = useState([]);
+  const [membershipPlans, setMembershipPlans] = useState([]);
+  const [trainers, setTrainers] = useState([]);
+  const [members, setMembers] = useState([]);
   const [dataError, setDataError] = useState(null);
 
   // Filter/Search states
-  const [activeTab, setActiveTab] = useState('reservations'); // reservations, menu, customers
-  const [selectedMenuCategory, setSelectedMenuCategory] = useState('all');
-  const [menuSearchText, setMenuSearchText] = useState('');
+  const [activeTab, setActiveTab] = useState('bookings'); // bookings, plans, trainers, members
+  const [planSearchText, setPlanSearchText] = useState('');
+  const [trainerSearchText, setTrainerSearchText] = useState('');
 
   const messagesEndRef = useRef(null);
 
   // Initialize first session
   useEffect(() => {
-    // Load existing sessions from localStorage or create new
-    const savedSessions = JSON.parse(localStorage.getItem('restaurant_chat_sessions') || '[]');
+    const savedSessions = JSON.parse(localStorage.getItem('gym_chat_sessions') || '[]');
     if (savedSessions.length > 0) {
       setSessionList(savedSessions);
       selectSession(savedSessions[0]);
@@ -56,7 +55,7 @@ function App() {
     messagesEndRef.current?.scrollIntoView({ behavior: 'smooth' });
   }, [messages, isLoadingChat]);
 
-  // Real-time polling for reservations, menu, customers
+  // Real-time polling for database inspector lists
   useEffect(() => {
     fetchDatabaseData();
     const interval = setInterval(() => {
@@ -69,24 +68,26 @@ function App() {
   // Fetch all lists from backend
   const fetchDatabaseData = async () => {
     try {
-      // Parallel fetches for speed
-      const [resReservations, resMenu, resCustomers] = await Promise.all([
-        fetch(`${API_BASE}/reservations/`),
-        fetch(`${API_BASE}/menu/`),
-        fetch(`${API_BASE}/customers/`)
+      const [resBookings, resPlans, resTrainers, resMembers] = await Promise.all([
+        fetch(`${API_BASE}/trainer_bookings/`),
+        fetch(`${API_BASE}/plans/`),
+        fetch(`${API_BASE}/trainers/`),
+        fetch(`${API_BASE}/members/`)
       ]);
 
-      if (resReservations.ok) {
-        const data = await resReservations.json();
-        // Sort reservations by created_at or reservation_time descending
-        setReservations(data.sort((a, b) => b.id - a.id));
+      if (resBookings.ok) {
+        const data = await resBookings.json();
+        setTrainerBookings(data.sort((a, b) => b.booking_id - a.booking_id));
       }
-      if (resMenu.ok) {
-        setMenuItems(await resMenu.json());
+      if (resPlans.ok) {
+        setMembershipPlans(await resPlans.json());
       }
-      if (resCustomers.ok) {
-        const data = await resCustomers.json();
-        setCustomers(data.sort((a, b) => b.id - a.id));
+      if (resTrainers.ok) {
+        setTrainers(await resTrainers.json());
+      }
+      if (resMembers.ok) {
+        const data = await resMembers.json();
+        setMembers(data.sort((a, b) => b.member_id - a.member_id));
       }
       setDataError(null);
     } catch (err) {
@@ -102,15 +103,14 @@ function App() {
     setMessages([
       {
         sender: 'assistant',
-        content: "Ciao! I am your Restaurant AI Receptionist. 🍕\nHow can I help you today? I can tell you about our menu, register you as a customer, or book a table reservation!",
+        content: "Hello! I am your Gym AI Receptionist. 🏋️\nHow can I help you today? I can answer membership questions, show you our plans, give trainer details, register your gym membership, or book a trainer session!",
         created_at: new Date().toISOString()
       }
     ]);
     
-    // Save to list
     const updatedSessions = [newId, ...sessionList.filter(s => s !== newId)];
     setSessionList(updatedSessions);
-    localStorage.setItem('restaurant_chat_sessions', JSON.stringify(updatedSessions));
+    localStorage.setItem('gym_chat_sessions', JSON.stringify(updatedSessions));
   };
 
   // Switch to an existing session and fetch its history
@@ -122,7 +122,13 @@ function App() {
       if (res.ok) {
         const data = await res.json();
         if (data.messages && data.messages.length > 0) {
-          setMessages(data.messages);
+          // Format messages for fronted
+          const formatted = data.messages.map(msg => ({
+            sender: msg.sender,
+            content: msg.message,
+            created_at: msg.created_at
+          }));
+          setMessages(formatted);
         } else {
           setDefaultGreeting();
         }
@@ -141,7 +147,7 @@ function App() {
     setMessages([
       {
         sender: 'assistant',
-        content: "Ciao! Welcome back. 🍕\nHow can I assist you with reservations or the menu today?",
+        content: "Hello! Welcome back. 🏋️\nHow can I assist you with memberships, trainers, or bookings today?",
         created_at: new Date().toISOString()
       }
     ]);
@@ -155,7 +161,6 @@ function App() {
 
     if (!customText) setUserInput('');
 
-    // Append user message
     const userMsg = {
       sender: 'user',
       content: textToSend,
@@ -176,14 +181,13 @@ function App() {
 
       if (res.ok) {
         const data = await res.json();
-        // Append bot reply
         setMessages(prev => [...prev, {
           sender: 'assistant',
           content: data.response,
           created_at: new Date().toISOString()
         }]);
 
-        // Trigger immediate pull of reservations/customers to reflect updates
+        // Trigger immediate pull of data to reflect updates
         fetchDatabaseData();
       } else {
         throw new Error('API Error');
@@ -192,7 +196,7 @@ function App() {
       console.error(err);
       setMessages(prev => [...prev, {
         sender: 'assistant',
-        content: 'Scusate! I encountered a network error. Please verify the backend service is running.',
+        content: 'I encountered a network error. Please verify the backend service is running.',
         created_at: new Date().toISOString()
       }]);
     } finally {
@@ -200,17 +204,17 @@ function App() {
     }
   };
 
-  // Cancel reservation
-  const handleCancelReservation = async (id) => {
-    if (!confirm('Are you sure you want to cancel this reservation?')) return;
+  // Cancel trainer booking
+  const handleCancelBooking = async (id) => {
+    if (!confirm('Are you sure you want to cancel this booking?')) return;
     try {
-      const res = await fetch(`${API_BASE}/reservations/${id}`, {
+      const res = await fetch(`${API_BASE}/trainer_bookings/${id}`, {
         method: 'DELETE'
       });
       if (res.ok) {
         fetchDatabaseData();
       } else {
-        alert('Failed to cancel reservation.');
+        alert('Failed to cancel booking.');
       }
     } catch (err) {
       console.error(err);
@@ -220,10 +224,10 @@ function App() {
 
   // Quick Reply Suggestion Chips
   const suggestionChips = [
-    "What's on the menu?",
-    "Book a table for 4",
-    "List my reservations",
-    "Show drinks and desserts"
+    "What membership plans do you have?",
+    "Show me trainers and specializations",
+    "Book a session with Rahul Sharma",
+    "List my upcoming sessions"
   ];
 
   // Helper to format date strings
@@ -245,12 +249,17 @@ function App() {
     }
   };
 
-  // Filter menu items by category and search term
-  const filteredMenuItems = menuItems.filter(item => {
-    const matchesCategory = selectedMenuCategory === 'all' || item.category.toLowerCase() === selectedMenuCategory.toLowerCase();
-    const matchesSearch = item.name.toLowerCase().includes(menuSearchText.toLowerCase()) || 
-                          item.description.toLowerCase().includes(menuSearchText.toLowerCase());
-    return matchesCategory && matchesSearch;
+  // Filter plans by search term
+  const filteredPlans = membershipPlans.filter(item => {
+    return item.plan_name.toLowerCase().includes(planSearchText.toLowerCase()) || 
+           (item.description && item.description.toLowerCase().includes(planSearchText.toLowerCase())) ||
+           (item.benefits && item.benefits.toLowerCase().includes(planSearchText.toLowerCase()));
+  });
+
+  // Filter trainers by search term
+  const filteredTrainers = trainers.filter(item => {
+    return item.trainer_name.toLowerCase().includes(trainerSearchText.toLowerCase()) ||
+           item.specialization.toLowerCase().includes(trainerSearchText.toLowerCase());
   });
 
   return (
@@ -259,9 +268,9 @@ function App() {
       <aside className="sidebar">
         <div className="brand">
           <div className="brand-icon">
-            <Sparkles size={20} />
+            <Dumbbell size={20} />
           </div>
-          <span className="brand-name">Restaurant AI Receptionist</span>
+          <span className="brand-name">Gym Receptionist AI</span>
         </div>
 
         <div className="sidebar-content">
@@ -288,25 +297,32 @@ function App() {
           <div style={{ marginTop: 'auto' }}>
             <div className="sidebar-nav">
               <div 
-                className={`nav-item ${activeTab === 'reservations' ? 'active' : ''}`}
-                onClick={() => setActiveTab('reservations')}
+                className={`nav-item ${activeTab === 'bookings' ? 'active' : ''}`}
+                onClick={() => setActiveTab('bookings')}
               >
                 <Calendar size={18} />
-                <span>Reservations</span>
+                <span>Trainer Bookings</span>
               </div>
               <div 
-                className={`nav-item ${activeTab === 'menu' ? 'active' : ''}`}
-                onClick={() => setActiveTab('menu')}
+                className={`nav-item ${activeTab === 'plans' ? 'active' : ''}`}
+                onClick={() => setActiveTab('plans')}
               >
-                <Utensils size={18} />
-                <span>Menu Explorer</span>
+                <Award size={18} />
+                <span>Membership Plans</span>
               </div>
               <div 
-                className={`nav-item ${activeTab === 'customers' ? 'active' : ''}`}
-                onClick={() => setActiveTab('customers')}
+                className={`nav-item ${activeTab === 'trainers' ? 'active' : ''}`}
+                onClick={() => setActiveTab('trainers')}
+              >
+                <Dumbbell size={18} />
+                <span>Personal Trainers</span>
+              </div>
+              <div 
+                className={`nav-item ${activeTab === 'members' ? 'active' : ''}`}
+                onClick={() => setActiveTab('members')}
               >
                 <Users size={18} />
-                <span>Customers</span>
+                <span>Gym Members</span>
               </div>
             </div>
           </div>
@@ -326,7 +342,7 @@ function App() {
         <section className="chat-container">
           <header className="chat-header">
             <div className="chat-header-info">
-              <h2>Restaurant AI Receptionist</h2>
+              <h2>Gym Receptionist Assistant</h2>
               <p>Assistant active • Session ID: {sessionId}</p>
             </div>
             {dataError && (
@@ -390,7 +406,7 @@ function App() {
               <input 
                 type="text" 
                 className="chat-input"
-                placeholder="Ask about the menu, check bookings, or make a reservation..."
+                placeholder="Ask about membership plans, trainers, or book a workout session..."
                 value={userInput}
                 onChange={(e) => setUserInput(e.target.value)}
                 disabled={isLoadingChat}
@@ -406,22 +422,28 @@ function App() {
         <section className="inspector-panel">
           <header className="inspector-header">
             <div className="inspector-title">
-              {activeTab === 'reservations' && (
+              {activeTab === 'bookings' && (
                 <>
                   <Calendar className="inspector-icon" size={18} />
-                  <span>Reservations Log</span>
+                  <span>Trainer Bookings Log</span>
                 </>
               )}
-              {activeTab === 'menu' && (
+              {activeTab === 'plans' && (
                 <>
-                  <Utensils className="inspector-icon" size={18} />
-                  <span>Menu Catalog</span>
+                  <Award className="inspector-icon" size={18} />
+                  <span>Membership Plans Catalog</span>
                 </>
               )}
-              {activeTab === 'customers' && (
+              {activeTab === 'trainers' && (
+                <>
+                  <Dumbbell className="inspector-icon" size={18} />
+                  <span>Personal Trainers Directory</span>
+                </>
+              )}
+              {activeTab === 'members' && (
                 <>
                   <Users className="inspector-icon" size={18} />
-                  <span>Registered Customers</span>
+                  <span>Registered Members Directory</span>
                 </>
               )}
             </div>
@@ -442,41 +464,41 @@ function App() {
               </div>
             )}
 
-            {/* TAB CONTENT: RESERVATIONS */}
-            {activeTab === 'reservations' && (
+            {/* TAB CONTENT: BOOKINGS */}
+            {activeTab === 'bookings' && (
               <div>
-                {reservations.length === 0 ? (
+                {trainerBookings.length === 0 ? (
                   <div className="empty-state">
                     <Calendar className="empty-icon" />
-                    <p className="empty-text">No reservations found in database.</p>
+                    <p className="empty-text">No trainer bookings found in database.</p>
                   </div>
                 ) : (
-                  reservations.map(res => (
-                    <div key={res.id} className="data-card">
+                  trainerBookings.map(res => (
+                    <div key={res.booking_id} className="data-card">
                       <div className="data-card-header">
-                        <span className="data-card-title">Booking #{res.id}</span>
+                        <span className="data-card-title">Booking #{res.booking_id}</span>
                         <span className={`badge ${res.status.toLowerCase()}`}>
                           {res.status}
                         </span>
                       </div>
                       <div className="data-card-grid">
                         <div className="data-item">
-                          <span className="data-label">Customer ID</span>
-                          <span className="data-value">{res.customer_id}</span>
+                          <span className="data-label">Member ID</span>
+                          <span className="data-value">{res.member_id}</span>
                         </div>
                         <div className="data-item">
-                          <span className="data-label">Party Size</span>
-                          <span className="data-value">{res.party_size} People</span>
+                          <span className="data-label">Trainer ID</span>
+                          <span className="data-value">{res.trainer_id}</span>
                         </div>
                         <div className="data-item" style={{ gridColumn: 'span 2' }}>
                           <span className="data-label">Time</span>
-                          <span className="data-value">{formatDateDisplay(res.reservation_time)}</span>
+                          <span className="data-value">{formatDateDisplay(res.booking_datetime)}</span>
                         </div>
-                        {res.special_requests && (
+                        {res.training_goal && (
                           <div className="data-item" style={{ gridColumn: 'span 2' }}>
-                            <span className="data-label">Special Requests</span>
+                            <span className="data-label">Training Goal</span>
                             <span className="data-value" style={{ fontStyle: 'italic' }}>
-                              "{res.special_requests}"
+                              "{res.training_goal}"
                             </span>
                           </div>
                         )}
@@ -485,9 +507,9 @@ function App() {
                         <div className="data-card-actions">
                           <button 
                             className="btn-action-small danger"
-                            onClick={() => handleCancelReservation(res.id)}
+                            onClick={() => handleCancelBooking(res.booking_id)}
                           >
-                            Cancel Table
+                            Cancel Booking
                           </button>
                         </div>
                       )}
@@ -497,60 +519,102 @@ function App() {
               </div>
             )}
 
-            {/* TAB CONTENT: MENU EXPLORER */}
-            {activeTab === 'menu' && (
+            {/* TAB CONTENT: MEMBERSHIP PLANS */}
+            {activeTab === 'plans' && (
               <div>
-                {/* Search Bar */}
                 <div className="search-container">
                   <input 
                     type="text" 
                     className="form-input search-input" 
-                    placeholder="Search menu dishes..." 
-                    value={menuSearchText}
-                    onChange={(e) => setMenuSearchText(e.target.value)}
+                    placeholder="Search membership plans..." 
+                    value={planSearchText}
+                    onChange={(e) => setPlanSearchText(e.target.value)}
                   />
                 </div>
 
-                {/* Category Filters */}
-                <div className="category-tabs">
-                  {['all', 'Appetizers', 'Entrees', 'Desserts', 'Drinks'].map(cat => (
-                    <span 
-                      key={cat} 
-                      className={`cat-tab ${selectedMenuCategory === cat ? 'active' : ''}`}
-                      onClick={() => setSelectedMenuCategory(cat)}
-                    >
-                      {cat}
-                    </span>
-                  ))}
-                </div>
-
-                {filteredMenuItems.length === 0 ? (
+                {filteredPlans.length === 0 ? (
                   <div className="empty-state">
-                    <BookOpen className="empty-icon" />
-                    <p className="empty-text">No menu items match your selection.</p>
+                    <Award className="empty-icon" />
+                    <p className="empty-text">No plans match your search.</p>
                   </div>
                 ) : (
-                  filteredMenuItems.map(item => (
-                    <div key={item.id} className="data-card">
+                  filteredPlans.map(item => (
+                    <div key={item.plan_id} className="data-card">
                       <div className="data-card-header">
-                        <span className="data-card-title">{item.name}</span>
+                        <span className="data-card-title">{item.plan_name}</span>
                         <span className="data-value" style={{ color: 'var(--accent-secondary)', fontWeight: 'bold' }}>
-                          ${item.price.toFixed(2)}
+                          ₹{Number(item.price).toLocaleString('en-IN')}
                         </span>
                       </div>
                       <div style={{ fontSize: '0.8rem', color: 'var(--text-muted)', marginBottom: '8px' }}>
                         {item.description}
                       </div>
+                      <div className="data-card-grid" style={{ gridTemplateColumns: '1fr' }}>
+                        <div className="data-item">
+                          <span className="data-label">Duration</span>
+                          <span className="data-value">{item.duration}</span>
+                        </div>
+                        {item.benefits && (
+                          <div className="data-item" style={{ marginTop: '4px' }}>
+                            <span className="data-label">Benefits</span>
+                            <span className="data-value" style={{ fontSize: '0.75rem', fontWeight: 'normal', color: 'var(--text-muted)' }}>
+                              {item.benefits.split(',').map((b, idx) => (
+                                <span key={idx} style={{ display: 'block', paddingLeft: '8px', position: 'relative' }}>
+                                  • {b.trim()}
+                                </span>
+                              ))}
+                            </span>
+                          </div>
+                        )}
+                      </div>
+                    </div>
+                  ))
+                )}
+              </div>
+            )}
+
+            {/* TAB CONTENT: TRAINERS */}
+            {activeTab === 'trainers' && (
+              <div>
+                <div className="search-container">
+                  <input 
+                    type="text" 
+                    className="form-input search-input" 
+                    placeholder="Search by name or specialization..." 
+                    value={trainerSearchText}
+                    onChange={(e) => setTrainerSearchText(e.target.value)}
+                  />
+                </div>
+
+                {filteredTrainers.length === 0 ? (
+                  <div className="empty-state">
+                    <Dumbbell className="empty-icon" />
+                    <p className="empty-text">No trainers match your search.</p>
+                  </div>
+                ) : (
+                  filteredTrainers.map(t => (
+                    <div key={t.trainer_id} className="data-card">
+                      <div className="data-card-header">
+                        <span className="data-card-title">{t.trainer_name}</span>
+                        <span className={`badge ${t.status.toLowerCase() === 'active' ? 'available' : 'cancelled'}`}>
+                          {t.status}
+                        </span>
+                      </div>
+                      <div style={{ fontSize: '0.8rem', color: 'var(--accent-secondary)', fontWeight: 500, marginBottom: '6px' }}>
+                        {t.specialization}
+                      </div>
                       <div className="data-card-grid">
                         <div className="data-item">
-                          <span className="data-label">Category</span>
-                          <span className="data-value">{item.category}</span>
+                          <span className="data-label">Experience</span>
+                          <span className="data-value">{t.experience}</span>
                         </div>
                         <div className="data-item">
-                          <span className="data-label">Status</span>
-                          <span className={`badge ${item.is_available ? 'available' : 'cancelled'}`} style={{ alignSelf: 'flex-start' }}>
-                            {item.is_available ? 'Available' : 'Unavailable'}
-                          </span>
+                          <span className="data-label">Session Fee</span>
+                          <span className="data-value">₹{Number(t.session_fee).toLocaleString('en-IN')}</span>
+                        </div>
+                        <div className="data-item" style={{ gridColumn: 'span 2' }}>
+                          <span className="data-label">Availability</span>
+                          <span className="data-value">{t.available_days} ({t.available_time})</span>
                         </div>
                       </div>
                     </div>
@@ -559,38 +623,49 @@ function App() {
               </div>
             )}
 
-            {/* TAB CONTENT: CUSTOMERS */}
-            {activeTab === 'customers' && (
+            {/* TAB CONTENT: MEMBERS */}
+            {activeTab === 'members' && (
               <div>
-                {customers.length === 0 ? (
+                {members.length === 0 ? (
                   <div className="empty-state">
                     <Users className="empty-icon" />
-                    <p className="empty-text">No registered customers yet.</p>
+                    <p className="empty-text">No registered gym members yet.</p>
                   </div>
                 ) : (
-                  customers.map(c => (
-                    <div key={c.id} className="data-card">
+                  members.map(m => (
+                    <div key={m.member_id} className="data-card">
                       <div className="data-card-header">
                         <span className="data-card-title" style={{ display: 'flex', alignItems: 'center', gap: '6px' }}>
                           <User size={14} style={{ color: 'var(--accent-primary)' }} />
-                          {c.name} (ID: {c.id})
+                          {m.name} (ID: {m.member_id})
+                        </span>
+                        <span className={`badge ${m.membership_status.toLowerCase() === 'active' ? 'available' : 'cancelled'}`}>
+                          {m.membership_status}
                         </span>
                       </div>
-                      <div className="data-card-grid" style={{ gridTemplateColumns: '1fr' }}>
+                      <div className="data-card-grid">
                         <div className="data-item">
                           <span className="data-label">Phone</span>
-                          <span className="data-value">{c.phone}</span>
+                          <span className="data-value">{m.phone_number}</span>
                         </div>
-                        {c.email && (
+                        {m.email && (
                           <div className="data-item">
                             <span className="data-label">Email</span>
-                            <span className="data-value">{c.email}</span>
+                            <span className="data-value" style={{ wordBreak: 'break-all' }}>{m.email}</span>
                           </div>
                         )}
-                        <div className="data-item">
-                          <span className="data-label">Registered Date</span>
-                          <span className="data-value">{new Date(c.created_at).toLocaleDateString()}</span>
-                        </div>
+                        {m.age && (
+                          <div className="data-item">
+                            <span className="data-label">Age</span>
+                            <span className="data-value">{m.age}</span>
+                          </div>
+                        )}
+                        {m.gender && (
+                          <div className="data-item">
+                            <span className="data-label">Gender</span>
+                            <span className="data-value">{m.gender}</span>
+                          </div>
+                        )}
                       </div>
                     </div>
                   ))
