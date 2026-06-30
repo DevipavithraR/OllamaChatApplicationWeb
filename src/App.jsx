@@ -102,7 +102,7 @@ function App() {
     setMessages([
       {
         sender: 'assistant',
-        content: "Ciao! I am your Restaurant AI Receptionist. 🍕\nHow can I help you today? I can tell you about our menu, register you as a customer, or book a table reservation!",
+        content: "Namaste! I am your Spice Symphony AI Receptionist. 🍛\nHow can I help you today? I can tell you about our premium Indian menu, register you as a customer, or book a table reservation!",
         created_at: new Date().toISOString()
       }
     ]);
@@ -141,7 +141,7 @@ function App() {
     setMessages([
       {
         sender: 'assistant',
-        content: "Ciao! Welcome back. 🍕\nHow can I assist you with reservations or the menu today?",
+        content: "Namaste! Welcome back to Spice Symphony. 🍛\nHow can I assist you with reservations or the menu today?",
         created_at: new Date().toISOString()
       }
     ]);
