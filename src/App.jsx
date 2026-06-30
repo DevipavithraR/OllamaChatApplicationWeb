@@ -535,7 +535,7 @@ function App() {
                       <div className="data-card-header">
                         <span className="data-card-title">{item.name}</span>
                         <span className="data-value" style={{ color: 'var(--accent-secondary)', fontWeight: 'bold' }}>
-                          ${item.price.toFixed(2)}
+                          ${(Number(item.price) || 0).toFixed(2)}
                         </span>
                       </div>
                       <div style={{ fontSize: '0.8rem', color: 'var(--text-muted)', marginBottom: '8px' }}>
